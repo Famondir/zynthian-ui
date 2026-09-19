@@ -55,6 +55,8 @@ IMG         = 7
 TKIMG       = 8
 LED_STATE   = 9
 LED_ID      = 10
+BOLD_TIMER_ID = 11  # pending after() job id for the Bold-colour outline change, or None
+LONG_TIMER_ID = 12  # pending after() job id for the Long-colour outline change, or None
 
 # Real V5 mockup coordinates, lifted from zynthian-webconf's mockup player
 # (mockup/index.html, viewBox "0 0 1920 1000" over the 1910x960 render) -
@@ -172,27 +174,27 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
             self.draw_chassis_background()
 
         self.buttons = [
-            # default label, alt label, rectangle id, text id, image id, image, tk image, led state, led id
-            ["OPT\nADMIN", None] + [None] * 9,             #0 OPT
-            ["MIX\nLEVEL", None] + [None] * 9,             #1 MIX
-            ["CTRL\nPRESET", None] + [None] * 9,           #2 CTRL
-            ["ZS3\nSHOT", None] + [None] * 9,              #3 ZS3
-            ["ALT\nHELP", None] + [None] * 9,                    #4 ALT
-            ["_icons/metronome.svg", None] + [None] * 9,   #5 METRO
-            ["PAD\nSTEP", None] + [None] * 9,              #6 PAD
-            ["F1", "F5"] + [None] * 9,                     #7 F1
-            ["\uf111", None] + [None] * 9,                 #8 RECORD
-            ["\uf04d", None] + [None] * 9,                 #9 STOP
-            ["\uf04b", None] + [None] * 9,                 #10 PLAY
-            ["F2", "F6"] + [None] * 9,                     #11 F2
-            ["BACK\nNO", None] + [None] * 9,               #12 BACK
-            ["\uf077", None] + [None] * 9,                 #13 UP
-            ["SEL\nYES", None] + [None] * 9,               #14 SEL
-            ["F3", "F7"] + [None] * 9,                     #15 F3
-            ["\uf053", None] + [None] * 9,                 #16 LEFT
-            ["\uf078", None] + [None] * 9,                 #17 DOWN
-            ["\uf054", None] + [None] * 9,                 #18 RIGHT
-            ["F4", "F8"] + [None] * 9                      #19 F4
+            # default label, alt label, rectangle id, text id, image id, image, tk image, led state, led id, bold timer id, long timer id
+            ["OPT\nADMIN", None] + [None] * 11,             #0 OPT
+            ["MIX\nLEVEL", None] + [None] * 11,             #1 MIX
+            ["CTRL\nPRESET", None] + [None] * 11,           #2 CTRL
+            ["ZS3\nSHOT", None] + [None] * 11,              #3 ZS3
+            ["ALT\nHELP", None] + [None] * 11,                    #4 ALT
+            ["_icons/metronome.svg", None] + [None] * 11,   #5 METRO
+            ["PAD\nSTEP", None] + [None] * 11,              #6 PAD
+            ["F1", "F5"] + [None] * 11,                     #7 F1
+            ["\uf111", None] + [None] * 11,                 #8 RECORD
+            ["\uf04d", None] + [None] * 11,                 #9 STOP
+            ["\uf04b", None] + [None] * 11,                 #10 PLAY
+            ["F2", "F6"] + [None] * 11,                     #11 F2
+            ["BACK\nNO", None] + [None] * 11,               #12 BACK
+            ["\uf077", None] + [None] * 11,                 #13 UP
+            ["SEL\nYES", None] + [None] * 11,               #14 SEL
+            ["F3", "F7"] + [None] * 11,                     #15 F3
+            ["\uf053", None] + [None] * 11,                 #16 LEFT
+            ["\uf078", None] + [None] * 11,                 #17 DOWN
+            ["\uf054", None] + [None] * 11,                 #18 RIGHT
+            ["F4", "F8"] + [None] * 11                      #19 F4
         ]
         if self.style == "classic":
             # Verbatim original layout: 20 buttons crammed into 6 uneven
@@ -607,10 +609,31 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         """
 
         if self.style in ("device", "device_cables"):
-            self.itemconfig(self.buttons[button][RECT_ID], state="normal")
+            config = self.buttons[button]
+            self.itemconfig(config[RECT_ID], state="normal", outline="#F0F000")
+            config[BOLD_TIMER_ID] = self.after(
+                zynthian_gui_config.zynswitch_bold_us // 1000,
+                lambda b=button: self._set_press_duration_color(b, BOLD_TIMER_ID, zynthian_gui_config.color_warn)
+            )
+            config[LONG_TIMER_ID] = self.after(
+                zynthian_gui_config.zynswitch_long_us // 1000,
+                lambda b=button: self._set_press_duration_color(b, LONG_TIMER_ID, zynthian_gui_config.color_error)
+            )
         else:
             self.move(f"v5_button_{button}", 2, 2)
         zynthian_gui_config.zyngui.cuia_queue.put_nowait(f"zynswitch {button + 4},P")
+
+    def _set_press_duration_color(self, button, timer_id_slot, color):
+        """ Scheduled via cb_button_push()'s after() timers: recolours the
+        press-outline once a press-duration threshold (Bold/Long) is
+        crossed while the button is still held. Clears its own timer slot
+        first so cb_button_release() won't try to after_cancel() a job
+        that already fired.
+        """
+
+        config = self.buttons[button]
+        config[timer_id_slot] = None
+        self.itemconfig(config[RECT_ID], outline=color)
 
     def cb_button_release(self, button):
         """ Handle button release
@@ -619,7 +642,12 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         """
 
         if self.style in ("device", "device_cables"):
-            self.itemconfig(self.buttons[button][RECT_ID], state="hidden")
+            config = self.buttons[button]
+            for slot in (BOLD_TIMER_ID, LONG_TIMER_ID):
+                if config[slot] is not None:
+                    self.after_cancel(config[slot])
+                    config[slot] = None
+            self.itemconfig(config[RECT_ID], state="hidden")
         else:
             self.move(f"v5_button_{button}", -2, -2)
         zynthian_gui_config.zyngui.cuia_queue.put_nowait(f"zynswitch {button + 4},R")
