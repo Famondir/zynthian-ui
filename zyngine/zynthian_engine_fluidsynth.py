@@ -396,7 +396,10 @@ class zynthian_engine_fluidsynth(zynthian_engine):
             cre = re.compile(r"loaded SoundFont has ID (\d+)")
             for line in output.split("\n"):
                 # logging.debug(f" => {line}")
-                res = cre.match(line)
+                # search(), not match(): a leading ANSI escape/CR on the line
+                # (bracketed-paste mode) would make an anchored match() fail
+                # even though the success message is right there.
+                res = cre.search(line)
                 if res:
                     sfi = int(res.group(1))
             # If soundfont was loaded succesfully ...
