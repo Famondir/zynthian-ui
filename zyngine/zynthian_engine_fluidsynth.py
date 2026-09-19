@@ -99,6 +99,12 @@ class zynthian_engine_fluidsynth(zynthian_engine):
         self.nickname = "FS"
         self.jackname = "fluidsynth"
 
+        # Some soundfonts (e.g. multi-hundred-MB workstation ROM dumps) take
+        # longer than the base engine's 30s default to load, even though the
+        # load itself succeeds - it's just the "load" command's prompt
+        # response that arrives late.
+        self.proc_timeout = 120
+
         self.bank_config = {}
 
         self.fs_options = "-o synth.midi-bank-select=mma -o synth.cpu-cores=3 -o synth.polyphony=128 \
