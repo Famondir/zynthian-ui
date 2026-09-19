@@ -67,8 +67,8 @@ V5_BUTTON_GROUP = (79, 154)                    # push-buttons-outline group offs
 V5_BUTTON_COLS = (50, 172, 294, 416)
 V5_BUTTON_ROWS = (50, 165, 275, 390, 505)
 V5_BUTTON_SIZE = (110, 105)
-V5_LED_GROUP = (133, 208)                      # per-button backlight glow, same col/row grid
-V5_LED_RADIUS = 45
+V5_LED_GROUP = (133, 208)                      # per-button status dot, same col/row grid
+V5_LED_RADIUS = 8
 
 # ------------------------------------------------------------------------------
 # Zynthian Touchscreen Keypad V5 Class
