@@ -54,6 +54,21 @@ IMG_ID      = 6
 IMG         = 7
 TKIMG       = 8
 LED_STATE   = 9
+LED_ID      = 10
+
+# Real V5 mockup coordinates, lifted from zynthian-webconf's mockup player
+# (mockup/index.html, viewBox "0 0 1920 1000" over the 1910x960 render) -
+# see openspec/changes/touchkeypad-visual-styles/design.md for how these
+# were found/derived. All values are pixel offsets within the render image.
+V5_IMAGE_PATH = "v5_mockup/v5_render_zenital_mockup_1910.png"
+V5_IMAGE_SIZE = (1910, 960)
+V5_SCREEN_RECT = (731, 254, 800, 480)          # x, y, w, h - matches the real screen's native 800x480
+V5_BUTTON_GROUP = (79, 154)                    # push-buttons-outline group offset
+V5_BUTTON_COLS = (50, 172, 294, 416)
+V5_BUTTON_ROWS = (50, 165, 275, 390, 505)
+V5_BUTTON_SIZE = (110, 105)
+V5_LED_GROUP = (133, 208)                      # per-button backlight glow, same col/row grid
+V5_LED_RADIUS = 45
 
 # ------------------------------------------------------------------------------
 # Zynthian Touchscreen Keypad V5 Class
@@ -83,32 +98,39 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         #  - "device_cables": "device" plus live cable graphics for whatever is
         #    actually plugged into the capture ports (see draw_connections())
         self.style = os.environ.get("ZYNTHIAN_GUI_KEYPAD_STYLE", "standard")
-        if self.style in ("device", "device_cables"):
-            self.top_margin = zynthian_gui_config.display_height // 10
-        else:
-            self.top_margin = 0
 
-        if self.style == "classic":
+        if self.style in ("device", "device_cables"):
+            # Fixed, absolute geometry lifted from the real V5 mockup render
+            # (see V5_* constants above) - not derived from display_width/
+            # height at all. run_zynthian.sh sets DISPLAY_WIDTH/HEIGHT to
+            # match V5_IMAGE_SIZE (plus this reserved cable margin) exactly
+            # for these styles, so the canvas this __init__ creates above is
+            # already the right size.
+            self.cable_margin = 160 if self.style == "device_cables" else 0
+            self.top_margin = self.cable_margin + V5_SCREEN_RECT[1]
+            self.panel_width = V5_SCREEN_RECT[0]
+            self.screen_width = V5_SCREEN_RECT[2]
+            self.screen_height = V5_SCREEN_RECT[3]
+            self.button_width, self.button_height = V5_BUTTON_SIZE
+        elif self.style == "classic":
             self.button_width = zynthian_gui_config.display_width // 10
             self.button_height = zynthian_gui_config.display_height // 6
             self.panel_width = self.button_width * 2
+            self.top_margin = 0
         else:
-            # standard/device/device_cables: buttons always fill the full
-            # available height (top_margin..display_height) with no gap -
+            # standard: buttons fill the full available height with no gap;
             # the screen area matches this exactly too (see
             # zynthian_gui_config.set_touch_keypad), so there's never a
             # black strip below either. To ALSO make standard's screen box
             # exactly match classic's (avoiding the icon/text overlap other
             # screens get when the screen aspect ratio changes - see
             # design.md), run_zynthian.sh pre-adjusts DISPLAY_WIDTH/
-            # DISPLAY_HEIGHT for standard so that this plain formula lands
-            # on classic's exact screen_width/screen_height. device/
-            # device_cables only get the width adjustment for now (bigger,
-            # more authentic proportions - to be re-tuned against the real
-            # chassis render instead, see design.md).
+            # DISPLAY_HEIGHT for standard so this plain formula lands on
+            # classic's exact screen_width/screen_height.
             self.button_width = zynthian_gui_config.display_width // 10
-            self.button_height = (zynthian_gui_config.display_height - self.top_margin) // 5
+            self.button_height = zynthian_gui_config.display_height // 5
             self.panel_width = self.button_width * 4
+            self.top_margin = 0
         self.bg_color = zynthian_gui_config.color_variant(zynthian_gui_config.color_panel_bg, -28)
         self.bg_color_over = zynthian_gui_config.color_variant(zynthian_gui_config.color_panel_bg, -22)
         self.border_color = zynthian_gui_config.color_bg
@@ -118,30 +140,30 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         self.place(x=0, y=0)
 
         if self.style in ("device", "device_cables"):
-            self.draw_chassis()
+            self.draw_chassis_device()
 
         self.buttons = [
-            # default label, alt label, rectangle id, text id, image id, image, tk image, led state
-            ["OPT\nADMIN", None] + [None] * 8,             #0 OPT
-            ["MIX\nLEVEL", None] + [None] * 8,             #1 MIX
-            ["CTRL\nPRESET", None] + [None] * 8,           #2 CTRL
-            ["ZS3\nSHOT", None] + [None] * 8,              #3 ZS3
-            ["ALT\nHELP", None] + [None] * 8,                    #4 ALT
-            ["_icons/metronome.svg", None] + [None] * 8,   #5 METRO
-            ["PAD\nSTEP", None] + [None] * 8,              #6 PAD
-            ["F1", "F5"] + [None] * 8,                     #7 F1
-            ["\uf111", None] + [None] * 8,                 #8 RECORD
-            ["\uf04d", None] + [None] * 8,                 #9 STOP
-            ["\uf04b", None] + [None] * 8,                 #10 PLAY
-            ["F2", "F6"] + [None] * 8,                     #11 F2
-            ["BACK\nNO", None] + [None] * 8,               #12 BACK
-            ["\uf077", None] + [None] * 8,                 #13 UP
-            ["SEL\nYES", None] + [None] * 8,               #14 SEL
-            ["F3", "F7"] + [None] * 8,                     #15 F3
-            ["\uf053", None] + [None] * 8,                 #16 LEFT
-            ["\uf078", None] + [None] * 8,                 #17 DOWN
-            ["\uf054", None] + [None] * 8,                 #18 RIGHT
-            ["F4", "F8"] + [None] * 8                      #19 F4
+            # default label, alt label, rectangle id, text id, image id, image, tk image, led state, led id
+            ["OPT\nADMIN", None] + [None] * 9,             #0 OPT
+            ["MIX\nLEVEL", None] + [None] * 9,             #1 MIX
+            ["CTRL\nPRESET", None] + [None] * 9,           #2 CTRL
+            ["ZS3\nSHOT", None] + [None] * 9,              #3 ZS3
+            ["ALT\nHELP", None] + [None] * 9,                    #4 ALT
+            ["_icons/metronome.svg", None] + [None] * 9,   #5 METRO
+            ["PAD\nSTEP", None] + [None] * 9,              #6 PAD
+            ["F1", "F5"] + [None] * 9,                     #7 F1
+            ["\uf111", None] + [None] * 9,                 #8 RECORD
+            ["\uf04d", None] + [None] * 9,                 #9 STOP
+            ["\uf04b", None] + [None] * 9,                 #10 PLAY
+            ["F2", "F6"] + [None] * 9,                     #11 F2
+            ["BACK\nNO", None] + [None] * 9,               #12 BACK
+            ["\uf077", None] + [None] * 9,                 #13 UP
+            ["SEL\nYES", None] + [None] * 9,               #14 SEL
+            ["F3", "F7"] + [None] * 9,                     #15 F3
+            ["\uf053", None] + [None] * 9,                 #16 LEFT
+            ["\uf078", None] + [None] * 9,                 #17 DOWN
+            ["\uf054", None] + [None] * 9,                 #18 RIGHT
+            ["F4", "F8"] + [None] * 9                      #19 F4
         ]
         if self.style == "classic":
             # Verbatim original layout: 20 buttons crammed into 6 uneven
@@ -168,9 +190,11 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
                 )
         else:
             # Layout mirrors the real V5 panel's 4x5 button grid (left column
-            # to right column, top row to bottom row), just docked to either
-            # edge of the touchscreen since there's no separate physical
-            # panel here.
+            # to right column, top row to bottom row). standard docks it to
+            # either screen edge (no separate physical panel here);
+            # device/device_cables use the real panel's fixed absolute
+            # positions instead (see draw_button_device()), so left/right
+            # docking doesn't apply to them.
             layout = (
                 (0, 1, 2, 3),
                 (4, 5, 6, 7),
@@ -178,14 +202,16 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
                 (12, 13, 14, 15),
                 (16, 17, 18, 19)
             )
-            if zynthian_gui_config.touch_navigation == "v5_keypad_left":
-                self.x_offset = 0
-            else:
-                self.x_offset = zynthian_gui_config.display_width - self.button_width * 4
+            if self.style == "standard":
+                if zynthian_gui_config.touch_navigation == "v5_keypad_left":
+                    self.x_offset = 0
+                else:
+                    self.x_offset = zynthian_gui_config.display_width - self.button_width * 4
 
+        draw_fn = self.draw_button_device if self.style in ("device", "device_cables") else self.draw_button
         for row, row_data in enumerate(layout):
             for column, button in enumerate(row_data):
-                self.draw_button(row, column, button)
+                draw_fn(row, column, button)
 
         # update with user settings from the environment
         self.apply_user_config()
@@ -199,33 +225,24 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
             # import note above draw_connections()).
             self.after(1000, self.refresh_connections)
 
-    def draw_chassis(self):
-        """ Draw the "device" style chassis background: a distinct panel
-        colour behind the whole canvas (so the button/screen area reads as
-        a single physical unit), a bezel frame around where the screen
-        will sit, and (styles with a top_margin) a reserved top strip for
-        port icons / connection cables.
+    def draw_chassis_device(self):
+        """ Draw the official V5 mockup render (from zynthian-webconf's
+        mockup player - see the V5_* constants and design.md) as the
+        background, at (0, cable_margin) so device_cables has room above it
+        for connection cables. The image already has the button
+        labels/legends and port icons baked in - we only overlay invisible
+        clickable hit-areas (draw_button_device) and per-button backlight
+        glow circles on top of it.
         """
 
-        w = zynthian_gui_config.display_width
-        h = zynthian_gui_config.display_height
-        self.create_rectangle(0, 0, w, h, fill=self.chassis_color, outline="", tags="v5_chassis")
+        icons_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons")
+        image_path = os.path.join(icons_dir, V5_IMAGE_PATH)
+        self.chassis_image = Image.open(image_path)
+        self.chassis_tkimage = ImageTk.PhotoImage(self.chassis_image)
+        self.create_image(0, self.cable_margin, anchor="nw", image=self.chassis_tkimage, tags="v5_chassis")
 
-        # Bezel around the screen area (screen itself is drawn by root_frame,
-        # which sits above this canvas - see zynthian_gui_config.set_touch_keypad)
-        screen_x0 = self.panel_width
-        screen_y0 = self.top_margin
-        screen_x1 = w
-        screen_y1 = self.top_margin + 5 * self.button_height
-        bezel = 6
-        self.create_rectangle(
-            screen_x0 - bezel, screen_y0 - bezel,
-            screen_x1, screen_y1 + bezel,
-            outline=self.border_color, width=bezel, tags="v5_chassis"
-        )
-
-        if self.top_margin:
-            self.create_line(0, self.top_margin, w, self.top_margin,
+        if self.cable_margin:
+            self.create_line(0, self.cable_margin, V5_IMAGE_SIZE[0], self.cable_margin,
                               fill=self.border_color, width=2, tags="v5_chassis")
 
     def draw_connections(self):
@@ -235,7 +252,7 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         is visible at a glance instead of buried in the Audio Input screen.
         """
 
-        if not self.top_margin:
+        if not self.cable_margin:
             return
         try:
             import zynautoconnect
@@ -245,17 +262,17 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
             ports = []
 
         max_slots = 6
-        slot_width = zynthian_gui_config.display_width // max_slots
+        slot_width = V5_IMAGE_SIZE[0] // max_slots
         for i, scp in enumerate(ports[:max_slots]):
             cx = slot_width * i + slot_width // 2
             label = scp.aliases[0] if scp.aliases else scp.name
-            line_id = self.create_line(cx, 0, cx, self.top_margin - 2,
+            line_id = self.create_line(cx, 0, cx, self.cable_margin - 2,
                                         fill=zynthian_gui_config.color_hl, width=3,
                                         tags="v5_connections")
-            plug_id = self.create_oval(cx - 5, self.top_margin - 10, cx + 5, self.top_margin,
+            plug_id = self.create_oval(cx - 5, self.cable_margin - 10, cx + 5, self.cable_margin,
                                         fill=zynthian_gui_config.color_hl, outline="",
                                         tags="v5_connections")
-            text_id = self.create_text(cx, self.top_margin // 2, text=label,
+            text_id = self.create_text(cx, self.cable_margin // 2, text=label,
                                         fill=self.text_color, font=(zynthian_gui_config.font_family, 9),
                                         tags="v5_connections")
             self.connection_slots.append((line_id, plug_id, text_id))
@@ -268,6 +285,43 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         self.connection_slots = []
         self.draw_connections()
         self.after(3000, self.refresh_connections)
+
+    def draw_button_device(self, row, column, button):
+        """ "device"/"device_cables" style: the button's face/label is
+        already part of the chassis render, so this only adds an invisible
+        clickable hit-area (a fully transparent image - Tkinter hit-tests
+        images by their bounding box regardless of pixel transparency,
+        unlike an unfilled rectangle, which only hit-tests its outline) plus
+        a per-button backlight glow circle for LED-style feedback.
+        """
+
+        try:
+            config = self.buttons[button]
+        except IndexError:
+            return
+        gx, gy = V5_BUTTON_GROUP
+        x = gx + V5_BUTTON_COLS[column]
+        y = self.cable_margin + gy + V5_BUTTON_ROWS[row]
+        w, h = V5_BUTTON_SIZE
+        tag = f"v5_button_{button}"
+
+        lx = V5_LED_GROUP[0] + V5_BUTTON_COLS[column]
+        ly = self.cable_margin + V5_LED_GROUP[1] + V5_BUTTON_ROWS[row]
+        r = V5_LED_RADIUS
+        config[LED_ID] = self.create_oval(lx - r, ly - r, lx + r, ly + r,
+                                           fill="#505050", outline="", tags=tag)
+
+        hit_image = ImageTk.PhotoImage(Image.new("RGBA", (w, h), (0, 0, 0, 0)))
+        config[TKIMG] = hit_image  # keep a reference or Tk garbage-collects it
+        config[IMG_ID] = self.create_image(x, y, anchor="nw", image=hit_image, tags=tag)
+
+        config[RECT_ID] = self.create_rectangle(
+            x, y, x + w, y + h,
+            outline="#F0F000", width=4, state="hidden", tags=tag
+        )
+
+        self.tag_bind(tag, "<Button-1>", lambda e, i=button: self.cb_button_push(i))
+        self.tag_bind(tag, "<ButtonRelease-1>", lambda e, i=button: self.cb_button_release(i))
 
     def draw_button(self, row, column, button):
         """ Draw button onto canvas
@@ -378,7 +432,10 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
             button: Index of button
         """
 
-        self.move(f"v5_button_{button}", 2, 2)
+        if self.style in ("device", "device_cables"):
+            self.itemconfig(self.buttons[button][RECT_ID], state="normal")
+        else:
+            self.move(f"v5_button_{button}", 2, 2)
         zynthian_gui_config.zyngui.cuia_queue.put_nowait(f"zynswitch {button + 4},P")
 
     def cb_button_release(self, button):
@@ -387,7 +444,10 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
             button: Index of button
         """
 
-        self.move(f"v5_button_{button}", -2, -2)
+        if self.style in ("device", "device_cables"):
+            self.itemconfig(self.buttons[button][RECT_ID], state="hidden")
+        else:
+            self.move(f"v5_button_{button}", -2, -2)
         zynthian_gui_config.zyngui.cuia_queue.put_nowait(f"zynswitch {button + 4},R")
 
     def set_button_color(self, button, color, mode):
@@ -404,6 +464,11 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         if config[LED_STATE] == mode:
             return
         config[LED_STATE] = mode
+        if self.style in ("device", "device_cables"):
+            # The button's own label/face is baked into the chassis render;
+            # feedback here is the per-button backlight glow circle instead.
+            self.itemconfig(config[LED_ID], fill=color if mode else "#505050")
+            return
         # in case the color is still the original wsled integer number, convert it
         label = config[LABEL]
         if  label.startswith('_'):

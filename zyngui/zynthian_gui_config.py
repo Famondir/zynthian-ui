@@ -777,22 +777,33 @@ if "zynthian_main.py" in sys.argv[0]:
             # leaving the main content area overlapping the keypad.
             panel_width = touch_keypad.panel_width
             top_margin = touch_keypad.top_margin
-            if touch_navigation == "v5_keypad_left":
+            if touch_keypad.style in ("device", "device_cables"):
+                # Fixed real-panel layout, not mirrorable - always docked
+                # left regardless of touch_navigation.
+                main_x = panel_width
+            elif touch_navigation == "v5_keypad_left":
                 main_x = panel_width
             main_y = top_margin
-            screen_width = display_width - panel_width
-            if touch_keypad.style == "classic":
-                # classic's last row is a distinct 10-button "mega-row" that
-                # intentionally peeks out below the screen, matching the
-                # original upstream look.
-                screen_height = 5 * display_height // 6
+            if hasattr(touch_keypad, "screen_width"):
+                # device/device_cables: fixed absolute screen box lifted
+                # from the real V5 mockup render (see V5_SCREEN_RECT).
+                screen_width = touch_keypad.screen_width
+                screen_height = touch_keypad.screen_height
             else:
-                # standard/device/device_cables' last row is just a regular
-                # part of their uniform 4x5 grid, so they use the full
-                # button-grid height instead of leaving a gap below it.
-                # (run_zynthian.sh pre-adjusts DISPLAY_WIDTH/DISPLAY_HEIGHT
-                # per style so this still lands on the right screen size.)
-                screen_height = 5 * touch_keypad.button_height
+                screen_width = display_width - panel_width
+                if touch_keypad.style == "classic":
+                    # classic's last row is a distinct 10-button "mega-row"
+                    # that intentionally peeks out below the screen,
+                    # matching the original upstream look.
+                    screen_height = 5 * display_height // 6
+                else:
+                    # standard's last row is just a regular part of its
+                    # uniform 4x5 grid, so it uses the full button-grid
+                    # height instead of leaving a gap below it.
+                    # (run_zynthian.sh pre-adjusts DISPLAY_WIDTH/
+                    # DISPLAY_HEIGHT so this still lands on classic's
+                    # exact screen size.)
+                    screen_height = 5 * touch_keypad.button_height
             touch_shown = 1
         else:
             main_x = 0
