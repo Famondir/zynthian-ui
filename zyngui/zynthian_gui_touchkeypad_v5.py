@@ -379,8 +379,9 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         # device instead of stopping right at the strip's edge.
         plug_bottom = self.cable_margin + 25
         font = tkfont.Font(family=zynthian_gui_config.font_family, size=9)
-        row_h = font.metrics("linespace") + 4
+        line_h = font.metrics("linespace")
         row_gap = 3
+        max_chip_chars = 30  # includes the "N. " enumeration prefix
         for cx, members in cable_slots:
             color = members[0][1]  # one category per cable, so one colour
             line_id = self.create_line(cx, 0, cx, plug_bottom - 2,
@@ -392,19 +393,44 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
             # Multiple devices sharing one physical jack: a left-aligned,
             # numbered stack of colour-chip labels (one row per device)
             # instead of cramming all names into one centred text block.
-            # A single device just gets one plain chip, no numbering.
-            block_h = len(members) * row_h + (len(members) - 1) * row_gap
+            # A single device just gets one plain chip, no numbering. Long
+            # labels wrap *inside* their own chip (~30 chars, prefix
+            # included) instead of growing one giant single-line chip.
+            texts = []
+            for i, (label, mcolor) in enumerate(members):
+                raw = f"{i + 1}. {label}" if len(members) > 1 else label
+                texts.append((self._wrap_cable_text(raw, max_chip_chars), mcolor))
+            row_heights = [len(lines) * line_h + 4 for lines, _ in texts]
+            block_h = sum(row_heights) + (len(texts) - 1) * row_gap
             y = (self.cable_margin - block_h) // 2
             left_x = cx - 40
-            for i, (label, mcolor) in enumerate(members):
-                text = f"{i + 1}. {label}" if len(members) > 1 else label
-                text_w = font.measure(text) + 8
+            for (lines, mcolor), row_h in zip(texts, row_heights):
+                text = "\n".join(lines)
+                text_w = max(font.measure(line) for line in lines) + 8
                 rect_id = self.create_rectangle(left_x, y, left_x + text_w, y + row_h,
                                                  fill=mcolor, outline="", tags="v5_connections")
                 text_id = self.create_text(left_x + 4, y + row_h // 2, text=text, anchor="w",
-                                            fill="#000000", font=font, tags="v5_connections")
+                                            justify=tkinter.LEFT, fill="#000000", font=font,
+                                            tags="v5_connections")
                 self.connection_slots.append((rect_id, text_id, None))
                 y += row_h + row_gap
+
+    @staticmethod
+    def _wrap_cable_text(text, max_chars):
+        """ Wrap text to at most max_chars per line, breaking on spaces
+        where possible but hard-breaking a single overlong token (JACK/
+        ALSA port names are often one space-free string). """
+
+        lines = []
+        remaining = text
+        while len(remaining) > max_chars:
+            break_at = remaining.rfind(" ", 0, max_chars)
+            if break_at <= 0:
+                break_at = max_chars
+            lines.append(remaining[:break_at].strip())
+            remaining = remaining[break_at:].strip()
+        lines.append(remaining)
+        return lines
 
     def refresh_connections(self):
         """ Periodically redraw the connection cables so unplugging/plugging
