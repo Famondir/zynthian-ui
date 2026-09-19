@@ -317,49 +317,50 @@ class zynthian_chain:
         if not zynautoconnect.acquire_lock():
             return
 
-        self.audio_routes = {}
-        # Add audio effects chain routes
-        first_slot_sources = []
-        if self.synth_slots:
-            for proc in self.synth_slots[-1]:
-                first_slot_sources.append(proc.get_jackname())
-        elif self.zynmixer_proc and self.zynmixer_proc.eng_code == "MR":
-            for am_slot in self.audio_slots:
-                if am_slot[0].eng_code in ("MI", "MR"):
-                    first_slot_sources = [f"zynmixer_chan:send_{am_slot[0].mixer_chan:02d}"]
-                    break
-        elif self.audio_thru:
-            first_slot_sources = self.get_input_pairs()
-        prev_slot_sources = first_slot_sources
+        try:
+            self.audio_routes = {}
+            # Add audio effects chain routes
+            first_slot_sources = []
+            if self.synth_slots:
+                for proc in self.synth_slots[-1]:
+                    first_slot_sources.append(proc.get_jackname())
+            elif self.zynmixer_proc and self.zynmixer_proc.eng_code == "MR":
+                for am_slot in self.audio_slots:
+                    if am_slot[0].eng_code in ("MI", "MR"):
+                        first_slot_sources = [f"zynmixer_chan:send_{am_slot[0].mixer_chan:02d}"]
+                        break
+            elif self.audio_thru:
+                first_slot_sources = self.get_input_pairs()
+            prev_slot_sources = first_slot_sources
 
-        for slot in self.audio_slots:
-            sources = []
-            for processor in slot:
-                jackname = processor.get_jackname()
-                if jackname.startswith("zynmixer"):
-                    jackname += f":output_{processor.mixer_chan:02d}"
-                sources.append(jackname)
-            if sources:
-                for jackname in sources:
+            for slot in self.audio_slots:
+                sources = []
+                for processor in slot:
+                    jackname = processor.get_jackname()
                     if jackname.startswith("zynmixer"):
-                        jackname = jackname.replace("output_", "input_")
-                    self.audio_routes[jackname] = prev_slot_sources.copy()
-                prev_slot_sources = sources
+                        jackname += f":output_{processor.mixer_chan:02d}"
+                    sources.append(jackname)
+                if sources:
+                    for jackname in sources:
+                        if jackname.startswith("zynmixer"):
+                            jackname = jackname.replace("output_", "input_")
+                        self.audio_routes[jackname] = prev_slot_sources.copy()
+                    prev_slot_sources = sources
 
-        # Add special processor inputs
-        if self.is_synth():
-            processor = self.synth_slots[0][0]
-            if processor.type == "Special":
-                sources = self.get_input_pairs()
-                self.audio_routes[processor.get_jackname()] = sources
+            # Add special processor inputs
+            if self.is_synth():
+                processor = self.synth_slots[0][0]
+                if processor.type == "Special":
+                    sources = self.get_input_pairs()
+                    self.audio_routes[processor.get_jackname()] = sources
 
-        # Connect end of chain
-        # Use end of post fader chain
+            # Connect end of chain
+            # Use end of post fader chain
 
-        for output in self.get_audio_out():
-            self.audio_routes[output] = prev_slot_sources.copy()
-
-        zynautoconnect.release_lock()
+            for output in self.get_audio_out():
+                self.audio_routes[output] = prev_slot_sources.copy()
+        finally:
+            zynautoconnect.release_lock()
         zynautoconnect.request_audio_connect()
 
     def get_input_pairs(self):
@@ -389,39 +390,41 @@ class zynthian_chain:
         if not zynautoconnect.acquire_lock():
             return
 
-        self.midi_routes = {}
-        for i, slot in enumerate(self.midi_slots):
-            if i == 0:
-                continue  # Chain inputs are handled by autoconnect
-            for processor in slot:
-                sources = []
-                for prev_proc in self.midi_slots[i - 1]:
-                    sources.append(prev_proc.get_jackname())
-                self.midi_routes[processor.get_jackname()] = sources
+        try:
+            self.midi_routes = {}
+            for i, slot in enumerate(self.midi_slots):
+                if i == 0:
+                    continue  # Chain inputs are handled by autoconnect
+                for processor in slot:
+                    sources = []
+                    for prev_proc in self.midi_slots[i - 1]:
+                        sources.append(prev_proc.get_jackname())
+                    self.midi_routes[processor.get_jackname()] = sources
 
-        sources = []
-        if len(self.midi_slots):
-            for prev_proc in self.midi_slots[-1]:
-                sources.append(prev_proc.get_jackname())
-        if self.synth_slots:
-            for proc in self.synth_slots[0]:
-                # TODO: Should always use engine's get_jackname? => proc.get_jackname(True)
-                dst_jackname = proc.engine.get_jackname()
-                self.midi_routes[dst_jackname] = sources
-                # Special Engines can generate MIDI output too!!
-                if proc.type == "Special":
-                    sources = [dst_jackname]
-        elif len(self.midi_slots) == 0 and self.midi_thru:
-            sources = self.midi_in
-        for output in self.midi_out:
-            self.midi_routes[output] = sources
-        # Feed output of MIDI chain to all audio processors - ideally this should only feed processors with
-        # MIDI inputs but it is probably as simple to let autoconnect deal with that.
-        for slot in self.audio_slots:
-            for proc in slot:
-                if proc.eng_code not in ["MI", "MR"]:
-                    self.midi_routes[proc.engine.jackname] = sources
-        zynautoconnect.release_lock()
+            sources = []
+            if len(self.midi_slots):
+                for prev_proc in self.midi_slots[-1]:
+                    sources.append(prev_proc.get_jackname())
+            if self.synth_slots:
+                for proc in self.synth_slots[0]:
+                    # TODO: Should always use engine's get_jackname? => proc.get_jackname(True)
+                    dst_jackname = proc.engine.get_jackname()
+                    self.midi_routes[dst_jackname] = sources
+                    # Special Engines can generate MIDI output too!!
+                    if proc.type == "Special":
+                        sources = [dst_jackname]
+            elif len(self.midi_slots) == 0 and self.midi_thru:
+                sources = self.midi_in
+            for output in self.midi_out:
+                self.midi_routes[output] = sources
+            # Feed output of MIDI chain to all audio processors - ideally this should only feed processors with
+            # MIDI inputs but it is probably as simple to let autoconnect deal with that.
+            for slot in self.audio_slots:
+                for proc in slot:
+                    if proc.eng_code not in ["MI", "MR"]:
+                        self.midi_routes[proc.engine.jackname] = sources
+        finally:
+            zynautoconnect.release_lock()
         zynautoconnect.request_midi_connect()
 
     def rebuild_graph(self):
