@@ -58,6 +58,15 @@ LED_ID      = 10
 BOLD_TIMER_ID = 11  # pending after() job id for the Bold-colour outline change, or None
 LONG_TIMER_ID = 12  # pending after() job id for the Long-colour outline change, or None
 
+# Per-knob canvas-item slots (parallel to the button LABEL/RECT_ID/etc
+# indices above, but knobs have no label/LED/press-duration-colour state -
+# their face is fixed artwork and press timing/classification is handled
+# entirely by the existing zynswitch CUIA thread, not locally).
+KNOB_TKIMG      = 0  # hit-area PhotoImage (kept alive - Tk garbage-collects it otherwise)
+KNOB_HIT_ID     = 1  # hit-area canvas image id
+KNOB_PRESS_ID   = 2  # press-outline oval id (hidden until clicked)
+KNOB_HOVER_ID   = 3  # hover-ring oval id, or None while not hovered
+
 # Real V5 mockup coordinates, lifted from zynthian-webconf's mockup player
 # (mockup/index.html, viewBox "0 0 1920 1000" over the 1910x960 render) -
 # see openspec/changes/touchkeypad-visual-styles/design.md for how these
@@ -71,6 +80,19 @@ V5_BUTTON_ROWS = (50, 165, 275, 390, 505)
 V5_BUTTON_SIZE = (110, 105)
 V5_LED_GROUP = (133, 208)                      # per-button status dot, same col/row grid
 V5_LED_RADIUS = 30
+
+# Rotary-encoder knob column (right of the screen), measured directly
+# against the vendored render (script-driven crop/grid-overlay, not
+# eyeballed) - see openspec/changes/touchkeypad-functional-knobs/design.md.
+# Supersedes touchkeypad-visual-styles/tasks.md task 5.14's rough
+# "(1658,125) group offset, r=52" note, which was never actually verified
+# against the pixel art. Knob index 0 is the top knob (labelled "1" in the
+# render) through index 3 (bottom, "4") - the same index space ZYNPOT/
+# ZYNSWITCH CUIAs already use for the 4 physical encoders.
+V5_KNOB_CENTER_X = 1711
+V5_KNOB_TOP_Y = 197
+V5_KNOB_SPACING_Y = 198
+V5_KNOB_RADIUS = 44                            # hit-area radius; a touch larger than the ~40px visible knob face
 
 # Top-edge port-icon x-positions. Left to right on the real chassis:
 # headphone, speaker jacks 1/2, mic/audio-in jacks 1/2, MIDI IN/THRU/OUT,
@@ -254,6 +276,11 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
             for row, row_data in enumerate(layout):
                 for column, button in enumerate(row_data):
                     self.draw_button_hitarea(row, column, button)
+            # Knob hit-areas go on top of everything else, same as the
+            # button hit-areas - see draw_knob_device().
+            self.knobs = [[None, None, None, None] for _ in range(4)]
+            for i in range(4):
+                self.draw_knob_device(i)
         else:
             for row, row_data in enumerate(layout):
                 for column, button in enumerate(row_data):
@@ -498,6 +525,120 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
 
         self.tag_bind(tag, "<Button-1>", lambda e, i=button: self.cb_button_push(i))
         self.tag_bind(tag, "<ButtonRelease-1>", lambda e, i=button: self.cb_button_release(i))
+
+    def draw_knob_device(self, index):
+        """ "device"/"device_cables" style: an interactive overlay for one
+        of the 4 rotary-encoder knob graphics baked into the chassis render
+        (see V5_KNOB_* above). Mirrors draw_button_hitarea()'s "invisible
+        transparent PhotoImage" hit-area technique, plus a hover ring and a
+        press-outline, and routes hover/scroll/click straight onto the same
+        zynpot/zynswitch CUIA pipeline the real hardware encoder (and the
+        keyboard bindings in zynthian_gui_keybinding.py) already use - no
+        new dispatch logic, this is purely a second input source feeding
+        the existing one.
+        """
+
+        cx = V5_KNOB_CENTER_X
+        cy = self.cable_margin + V5_KNOB_TOP_Y + index * V5_KNOB_SPACING_Y
+        r = V5_KNOB_RADIUS
+        tag = f"v5_knob_{index}"
+        config = self.knobs[index]
+
+        hit_image = ImageTk.PhotoImage(Image.new("RGBA", (2 * r, 2 * r), (0, 0, 0, 0)))
+        config[KNOB_TKIMG] = hit_image  # keep a reference or Tk garbage-collects it
+        config[KNOB_HIT_ID] = self.create_image(cx - r, cy - r, anchor="nw", image=hit_image, tags=tag)
+
+        config[KNOB_PRESS_ID] = self.create_oval(
+            cx - r, cy - r, cx + r, cy + r,
+            outline="#F0F000", width=4, state="hidden", tags=tag
+        )
+
+        # Hover ring: pre-created hidden (like the press-outline above) and
+        # only ever itemconfig()'d visible/hidden afterwards - NEVER
+        # created/deleted at runtime, and deliberately given no tag of its
+        # own (not "tag"/v5_knob_{index}). Creating a new stacked canvas
+        # item that shares the hit-area's own event tag while handling that
+        # tag's <Enter> callback made Tk's crossing-event machinery
+        # re-fire: the new item becomes topmost under the pointer, which
+        # fires <Leave> on the tag (deleting the ring) then <Enter> again
+        # (recreating it) - an infinite loop that pegs the CPU and starves
+        # the Tk mainloop (real bug hit during manual testing - the UI
+        # became fully unresponsive, including to SIGINT/SIGTERM, since
+        # Tkinter's default per-callback exception/interrupt handling
+        # swallows KeyboardInterrupt raised inside a callback and just
+        # keeps the mainloop going).
+        config[KNOB_HOVER_ID] = self.create_oval(
+            cx - r - 4, cy - r - 4, cx + r + 4, cy + r + 4,
+            outline=zynthian_gui_config.color_hl, width=2, state="hidden"
+        )
+
+        self.tag_bind(tag, "<Enter>", lambda e, i=index: self.cb_knob_enter(i))
+        self.tag_bind(tag, "<Leave>", lambda e, i=index: self.cb_knob_leave(i))
+        self.tag_bind(tag, "<Button-4>", lambda e, i=index: self.cb_knob_wheel(i, 1))
+        self.tag_bind(tag, "<Button-5>", lambda e, i=index: self.cb_knob_wheel(i, -1))
+        self.tag_bind(tag, "<Button-1>", lambda e, i=index: self.cb_knob_push(i))
+        self.tag_bind(tag, "<ButtonRelease-1>", lambda e, i=index: self.cb_knob_release(i))
+
+    def cb_knob_enter(self, index):
+        """ Hover feedback: an adjust-style cursor plus the pre-created
+        highlight ring (see draw_knob_device()) made visible. Cleared in
+        cb_knob_leave(). Only ever itemconfig()'s the ring's state - never
+        creates/deletes a canvas item here (see draw_knob_device() for why
+        that matters). """
+
+        self.config(cursor="sb_v_double_arrow")
+        # state="disabled", not "normal": a "normal" item becomes eligible
+        # to be Tk's "current" (topmost-under-pointer) item, which can flip
+        # current away from the hit-area mid-hover and re-fire <Leave>/
+        # <Enter> on its tag - if the handler for that also toggles a
+        # state, you get an infinite ping-pong (reproduced and confirmed
+        # via isolated testing; see design.md). "disabled" still draws the
+        # ring but is permanently excluded from that picking, so it can
+        # never contend for "current" no matter when it's toggled.
+        self.itemconfig(self.knobs[index][KNOB_HOVER_ID], state="disabled")
+
+    def cb_knob_leave(self, index):
+        """ Clears the hover feedback from cb_knob_enter(). """
+
+        self.config(cursor="")
+        self.itemconfig(self.knobs[index][KNOB_HOVER_ID], state="hidden")
+
+    def cb_knob_wheel(self, index, direction):
+        """ One wheel notch = one encoder detent, matching both the real
+        hardware encoder's per-detent CUIA and the existing keyboard
+        binding (Comma/Period -> "ZYNPOT ...,-1"/"...,1" in
+        zynthian_gui_keybinding.py) - no custom acceleration curve here;
+        whatever the current screen's zynpot_cb does with a run of +/-1
+        deltas applies unchanged, same as it would for a real encoder.
+        """
+
+        zynthian_gui_config.zyngui.cuia_queue.put_nowait(f"zynpot {index},{direction}")
+
+    def cb_knob_push(self, index):
+        """ Mirrors cb_button_push(): the knob's push-button is zynswitch
+        index `index` directly - no "+4" offset, since that offset only
+        exists to keep the 20 keypad buttons out of the 4 encoder
+        switches' reserved index range (0-3). Short/bold/long press timing
+        and whatever function is currently bound to that switch index are
+        handled entirely by the existing CUIA thread (zynthian_gui.py),
+        not duplicated here - only the press-outline is local state.
+        """
+
+        config = self.knobs[index]
+        # state="disabled", not "normal" - see cb_knob_enter()'s comment.
+        # This is exactly what the real crash (click-triggered, not just
+        # hover) turned out to be: revealing the press-outline as "normal"
+        # made IT win "current item" over the hit-area, which fed back
+        # into the hover ring the same way.
+        self.itemconfig(config[KNOB_PRESS_ID], state="disabled")
+        zynthian_gui_config.zyngui.cuia_queue.put_nowait(f"zynswitch {index},P")
+
+    def cb_knob_release(self, index):
+        """ See cb_knob_push(). """
+
+        config = self.knobs[index]
+        self.itemconfig(config[KNOB_PRESS_ID], state="hidden")
+        zynthian_gui_config.zyngui.cuia_queue.put_nowait(f"zynswitch {index},R")
 
     def draw_button(self, row, column, button):
         """ Draw button onto canvas
