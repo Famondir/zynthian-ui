@@ -332,11 +332,17 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
             config = self.buttons[button]
         except IndexError:
             return
-        lx = V5_LED_GROUP[0] + V5_BUTTON_COLS[column]
-        ly = self.cable_margin + V5_LED_GROUP[1] + V5_BUTTON_ROWS[row]
-        r = V5_LED_RADIUS
-        config[LED_ID] = self.create_oval(lx - r, ly - r, lx + r, ly + r,
-                                           fill="#505050", outline="")
+        # Cover the whole button footprint (not just a small dot at the
+        # nominal LED position) so every transparent bit of this button's
+        # cutout (the full label/glyph shape, not only its centre) gets
+        # filled by the backlight colour instead of leaking the white
+        # backing through around the edges.
+        gx, gy = V5_BUTTON_GROUP
+        x = gx + V5_BUTTON_COLS[column]
+        y = self.cable_margin + gy + V5_BUTTON_ROWS[row]
+        w, h = V5_BUTTON_SIZE
+        config[LED_ID] = self.create_rectangle(x, y, x + w, y + h,
+                                                fill="#505050", outline="")
 
     def draw_button_hitarea(self, row, column, button):
         """ "device"/"device_cables" style, layer 2 (top, drawn after the
@@ -505,15 +511,24 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         """
 
         config = self.buttons[button]
+        if self.style in ("device", "device_cables"):
+            # The button's own label/face is baked into the chassis render;
+            # feedback here is the per-button backlight rectangle instead.
+            # Dedupe on the literal colour, not "mode": most of the wsled
+            # system's steady-state colours (red, yellow, ...) aren't one
+            # of the 4 named modes (default/alt/active/active2), so `mode`
+            # is None for them - same as this button's untouched initial
+            # LED_STATE, which made the very first (and every later) call
+            # look like "no change" and get silently skipped forever.
+            if config[LED_STATE] == color:
+                return
+            config[LED_STATE] = color
+            self.itemconfig(config[LED_ID], fill=color)
+            return
         # don't bother with update if nothing has really changed (redrawing images causes visible blinking!)
         if config[LED_STATE] == mode:
             return
         config[LED_STATE] = mode
-        if self.style in ("device", "device_cables"):
-            # The button's own label/face is baked into the chassis render;
-            # feedback here is the per-button backlight glow circle instead.
-            self.itemconfig(config[LED_ID], fill=color if mode else "#505050")
-            return
         # in case the color is still the original wsled integer number, convert it
         label = config[LABEL]
         if  label.startswith('_'):
