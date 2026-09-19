@@ -113,7 +113,12 @@ class zynthian_engine_fluidsynth(zynthian_engine):
 -o synth.reverb.active=0".format(self.jackname, self.jackname)
 
         self.command = "fluidsynth -a jack -m jack -g 1 {}".format(self.fs_options)
-        self.command_prompt = "\n> "
+        # This distro's fluidsynth (built against a newer readline/libedit)
+        # wraps its prompt in a "bracketed paste mode" ANSI escape sequence
+        # (e.g. "\r\n\x1b[?2004h> "), so a literal "\n> " never matches and
+        # every command times out even though it already succeeded. Allow
+        # optional ANSI CSI sequences between the newline and the prompt.
+        self.command_prompt = r"\r?\n(?:\x1b\[[0-9;?]*[a-zA-Z])*> "
 
         self.start()
         self.reset()
