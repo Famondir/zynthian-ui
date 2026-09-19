@@ -72,9 +72,12 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
                 highlightthickness=0)
         self.shown = False
 
-        # Three parallel, selectable looks (set ZYNTHIAN_GUI_KEYPAD_STYLE before
+        # Four parallel, selectable looks (set ZYNTHIAN_GUI_KEYPAD_STYLE before
         # launch, see run_zynthian.sh):
-        #  - "standard": original flat button grid, full display height, no chassis
+        #  - "classic": the original, unmodified upstream layout (uneven
+        #    6-row grid, kept verbatim for comparison/fallback)
+        #  - "standard" (default): same idea but the button grid actually
+        #    matches the real V5 panel's 4x5 arrangement
         #  - "device": adds a chassis-style background/bezel + top port strip,
         #    matching the real V5's physical proportions
         #  - "device_cables": "device" plus live cable graphics for whatever is
@@ -86,8 +89,12 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
             self.top_margin = 0
 
         self.button_width = zynthian_gui_config.display_width // 10
-        self.button_height = (zynthian_gui_config.display_height - self.top_margin) // 5
-        self.panel_width = self.button_width * 4
+        if self.style == "classic":
+            self.button_height = zynthian_gui_config.display_height // 6
+            self.panel_width = self.button_width * 2
+        else:
+            self.button_height = (zynthian_gui_config.display_height - self.top_margin) // 5
+            self.panel_width = self.button_width * 4
         self.bg_color = zynthian_gui_config.color_variant(zynthian_gui_config.color_panel_bg, -28)
         self.bg_color_over = zynthian_gui_config.color_variant(zynthian_gui_config.color_panel_bg, -22)
         self.border_color = zynthian_gui_config.color_bg
@@ -122,20 +129,45 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
             ["\uf054", None] + [None] * 8,                 #18 RIGHT
             ["F4", "F8"] + [None] * 8                      #19 F4
         ]
-        # Layout mirrors the real V5 panel's 4x5 button grid (left column to
-        # right column, top row to bottom row), just docked to either edge
-        # of the touchscreen since there's no separate physical panel here.
-        layout = (
-            (0, 1, 2, 3),
-            (4, 5, 6, 7),
-            (8, 9, 10, 11),
-            (12, 13, 14, 15),
-            (16, 17, 18, 19)
-        )
-        if zynthian_gui_config.touch_navigation == "v5_keypad_left":
-            self.x_offset = 0
+        if self.style == "classic":
+            # Verbatim original layout: 20 buttons crammed into 6 uneven
+            # rows (mostly 2 per row, the last row holding 10).
+            if zynthian_gui_config.touch_navigation == "v5_keypad_left":
+                self.x_offset = 0
+                layout = (
+                    (0, 1),
+                    (2, 6),
+                    (5, 3),
+                    (12, 14),
+                    (4, 13),
+                    (16, 17, 18, 8, 9, 10, 7, 11, 15, 19)
+                )
+            else:
+                self.x_offset = zynthian_gui_config.display_width - self.button_width * 2
+                layout = (
+                    (0, 1),
+                    (2, 6),
+                    (5, 3),
+                    (12, 14),
+                    (13, 4),
+                    (7, 11, 15, 19, 8, 9, 10, 16, 17, 18)
+                )
         else:
-            self.x_offset = zynthian_gui_config.display_width - self.button_width * 4
+            # Layout mirrors the real V5 panel's 4x5 button grid (left column
+            # to right column, top row to bottom row), just docked to either
+            # edge of the touchscreen since there's no separate physical
+            # panel here.
+            layout = (
+                (0, 1, 2, 3),
+                (4, 5, 6, 7),
+                (8, 9, 10, 11),
+                (12, 13, 14, 15),
+                (16, 17, 18, 19)
+            )
+            if zynthian_gui_config.touch_navigation == "v5_keypad_left":
+                self.x_offset = 0
+            else:
+                self.x_offset = zynthian_gui_config.display_width - self.button_width * 4
 
         for row, row_data in enumerate(layout):
             for column, button in enumerate(row_data):
@@ -236,7 +268,12 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
             label = config[0]
         except:
             return
-        x = self.x_offset + self.button_width * column
+        if self.style == "classic" and row == 5:
+            # Original layout's mega-row spans the full width, ignoring
+            # x_offset, to fit its 10 buttons.
+            x = self.button_width * column
+        else:
+            x = self.x_offset + self.button_width * column
         y = self.top_margin + self.button_height * row
         tag = f"v5_button_{button}"
         config[RECT_ID] = self.create_rectangle(
