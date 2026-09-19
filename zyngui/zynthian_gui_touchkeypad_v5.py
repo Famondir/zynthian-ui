@@ -88,11 +88,25 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         else:
             self.top_margin = 0
 
-        self.button_width = zynthian_gui_config.display_width // 10
-        if self.style == "classic":
+        if self.style == "standard":
+            # Deliberately keep the exact same screen width/height budget as
+            # classic (4 narrower columns instead of classic's 2 wider ones,
+            # same total panel_width) - any deviation from classic's screen
+            # box, in either dimension, was observed to break other screens'
+            # icon/text layout (e.g. "Add Chain"), which scale icons to the
+            # available cell size independently of the fixed-size label
+            # text. device/device_cables accept that trade-off deliberately
+            # for bigger, more authentic proportions (and will be re-tuned
+            # against the real chassis render instead - see design.md).
+            self.button_width = zynthian_gui_config.display_width // 20
+            self.button_height = zynthian_gui_config.display_height // 6
+            self.panel_width = (zynthian_gui_config.display_width // 10) * 2
+        elif self.style == "classic":
+            self.button_width = zynthian_gui_config.display_width // 10
             self.button_height = zynthian_gui_config.display_height // 6
             self.panel_width = self.button_width * 2
         else:
+            self.button_width = zynthian_gui_config.display_width // 10
             self.button_height = (zynthian_gui_config.display_height - self.top_margin) // 5
             self.panel_width = self.button_width * 4
         self.bg_color = zynthian_gui_config.color_variant(zynthian_gui_config.color_panel_bg, -28)

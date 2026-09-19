@@ -781,15 +781,18 @@ if "zynthian_main.py" in sys.argv[0]:
                 main_x = panel_width
             main_y = top_margin
             screen_width = display_width - panel_width
-            if touch_keypad.style == "classic":
-                # classic's last row is a distinct 10-button "mega-row" that
-                # intentionally peeks out below the screen, matching the
-                # original upstream look.
+            if touch_keypad.style in ("classic", "standard"):
+                # Both deliberately share the exact same screen height budget
+                # (classic's last row is a distinct 10-button "mega-row" that
+                # peeks out below the screen; standard mimics the same ratio
+                # on purpose, to guarantee byte-for-byte identical screen
+                # dimensions to classic - see zynthian_gui_touchkeypad_v5).
                 screen_height = 5 * display_height // 6
             else:
-                # standard/device/device_cables' last row is just a regular
-                # part of the uniform 4x5 grid, so the screen should use the
-                # full button-grid height instead of leaving a gap below it.
+                # device/device_cables' last row is just a regular part of
+                # their uniform 4x5 grid with no shared-ratio constraint, so
+                # they use the full button-grid height instead of leaving a
+                # gap below it.
                 screen_height = 5 * touch_keypad.button_height
             touch_shown = 1
         else:
