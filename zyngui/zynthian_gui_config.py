@@ -770,18 +770,25 @@ if "zynthian_main.py" in sys.argv[0]:
     from PIL import Image, ImageTk
 
     def set_touch_keypad(enabled=True):
-        global main_x, screen_width, screen_height, touch_shown
+        global main_x, main_y, screen_width, screen_height, touch_shown
         if enabled:
-            # Must match zynthian_gui_touchkeypad_v5's button_width (display_width // 10)
-            # times its 4 columns, or the main content area overlaps the keypad.
-            panel_width = (display_width // 10) * 4
+            # Read geometry from the keypad itself instead of duplicating its
+            # formulas here - the two got out of sync before (panel_width),
+            # leaving the main content area overlapping the keypad.
+            panel_width = touch_keypad.panel_width
+            top_margin = touch_keypad.top_margin
             if touch_navigation == "v5_keypad_left":
                 main_x = panel_width
+            main_y = top_margin
             screen_width = display_width - panel_width
-            screen_height = 5 * display_height // 6
+            if top_margin:
+                screen_height = 5 * touch_keypad.button_height
+            else:
+                screen_height = 5 * display_height // 6
             touch_shown = 1
         else:
             main_x = 0
+            main_y = 0
             screen_width = display_width
             screen_height = display_height
             touch_shown = 0
