@@ -70,23 +70,33 @@ V5_BUTTON_SIZE = (110, 105)
 V5_LED_GROUP = (133, 208)                      # per-button status dot, same col/row grid
 V5_LED_RADIUS = 30
 
-# Top-edge port-icon x-positions, NOT from index.html (the mockup player has
-# no interactive elements there) but measured directly off the vendored PNG:
-# scanned a horizontal band across the port-icon row (y=55-115) for bright/
-# opaque pixel clusters (the white line-art icons/labels against the dark
-# chassis), then grouped clusters within ~45px of each other into the
-# physical port groups visible in the render, left to right: headphone,
-# speaker jacks 1/2, mic/audio-in jacks 1/2, MIDI IN/THRU/OUT, ethernet,
-# USB, USB, boot-select, power.
-V5_PORT_X_AUDIO_OUT = (330, 477)   # speaker jacks 1/2
-V5_PORT_X_AUDIO_IN = (630, 777)    # mic/audio-in jacks 1/2
-V5_PORT_X_MIDI_IN = (945,)         # MIDI "IN" DIN jack (only one on real hardware)
-V5_PORT_X_MIDI_THRU = (1130,)
-V5_PORT_X_MIDI_OUT = (1320,)
-V5_PORT_LAN = (1510,)
-V5_PORT_USB_3 = (1673,)
-V5_PORT_USB_2 = (1840,)
-V5_PORT_USB_B = (2000,)
+# Top-edge port-icon x-positions. Left to right on the real chassis:
+# headphone, speaker jacks 1/2, mic/audio-in jacks 1/2, MIDI IN/THRU/OUT,
+# ethernet, USB-3, USB-2, USB-B, power.
+#
+# Values below are as measured by hand against a reference screenshot of
+# the render that was _V5_PORT_REF_WIDTH pixels wide - NOT the same as
+# V5_IMAGE_SIZE's actual 1910px, so they're scaled at load time. If these
+# ever need re-measuring, measure against whatever image you have open and
+# just update _V5_PORT_REF_WIDTH to that image's width - don't hand-convert
+# the numbers.
+_V5_PORT_REF_WIDTH = 2383
+
+
+def _v5_port_x(*values):
+    scale = V5_IMAGE_SIZE[0] / _V5_PORT_REF_WIDTH
+    return tuple(round(v * scale) for v in values)
+
+
+V5_PORT_X_AUDIO_OUT = _v5_port_x(330, 477)   # speaker jacks 1/2
+V5_PORT_X_AUDIO_IN = _v5_port_x(630, 777)    # mic/audio-in jacks 1/2
+V5_PORT_X_MIDI_IN = _v5_port_x(945)          # MIDI "IN" DIN jack (only one on real hardware)
+V5_PORT_X_MIDI_THRU = _v5_port_x(1130)
+V5_PORT_X_MIDI_OUT = _v5_port_x(1320)
+V5_PORT_LAN = _v5_port_x(1510)
+V5_PORT_USB_3 = _v5_port_x(1673)
+V5_PORT_USB_2 = _v5_port_x(1840)
+V5_PORT_USB_B = _v5_port_x(2000)
 
 
 # ------------------------------------------------------------------------------
@@ -370,17 +380,22 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
                     cx = anchors[-1] + 24 * (i - len(anchors) + 1)
                 items.append((label, color, cx))
 
-        top_y = 25  # leave a small margin before the cable line starts
-        text_y = (top_y + self.cable_margin) // 2
+        # The plug end (not the top/outside end) sits 25px lower than the
+        # cable-margin boundary, so it visually reaches closer into/onto the
+        # device instead of stopping right at the strip's edge.
+        plug_bottom = self.cable_margin + 25
+        text_y = self.cable_margin // 2
         for label, color, cx in items:
-            line_id = self.create_line(cx, top_y, cx, self.cable_margin - 2,
+            line_id = self.create_line(cx, 0, cx, plug_bottom - 2,
                                         fill=color, width=3, tags="v5_connections")
-            plug_id = self.create_oval(cx - 5, self.cable_margin - 10, cx + 5, self.cable_margin,
+            plug_id = self.create_oval(cx - 5, plug_bottom - 10, cx + 5, plug_bottom,
                                         fill=color, outline="", tags="v5_connections")
             # Wrap long labels instead of letting them overlap neighbouring
-            # cables - width is pixel-based, tuned to wrap at roughly 16
-            # characters for this font/size.
-            text_id = self.create_text(cx, text_y, text=label, width=100,
+            # cables - width is pixel-based. Ports are ~117-152px apart
+            # (measured), so keep wrapped labels narrower than the tightest
+            # gap rather than the ~16-char rule of thumb, which could still
+            # touch a neighbour at this spacing.
+            text_id = self.create_text(cx, text_y, text=label, width=80,
                                         fill="#000000", font=(zynthian_gui_config.font_family, 9),
                                         justify=tkinter.CENTER, tags="v5_connections")
             self.connection_slots.append((line_id, plug_id, text_id))
