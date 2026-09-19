@@ -772,7 +772,9 @@ if "zynthian_main.py" in sys.argv[0]:
     def set_touch_keypad(enabled=True):
         global main_x, screen_width, screen_height, touch_shown
         if enabled:
-            panel_width = display_width // 5
+            # Must match zynthian_gui_touchkeypad_v5's button_width (display_width // 10)
+            # times its 4 columns, or the main content area overlaps the keypad.
+            panel_width = (display_width // 10) * 4
             if touch_navigation == "v5_keypad_left":
                 main_x = panel_width
             screen_width = display_width - panel_width
