@@ -78,9 +78,16 @@ V5_LED_RADIUS = 30
 # physical port groups visible in the render, left to right: headphone,
 # speaker jacks 1/2, mic/audio-in jacks 1/2, MIDI IN/THRU/OUT, ethernet,
 # USB, USB, boot-select, power.
-V5_PORT_X_AUDIO_OUT = (157, 353)   # speaker jacks 1/2
-V5_PORT_X_AUDIO_IN = (506, 623)    # mic/audio-in jacks 1/2
-V5_PORT_X_MIDI_IN = (756,)         # MIDI "IN" DIN jack (only one on real hardware)
+V5_PORT_X_AUDIO_OUT = (330, 477)   # speaker jacks 1/2
+V5_PORT_X_AUDIO_IN = (630, 777)    # mic/audio-in jacks 1/2
+V5_PORT_X_MIDI_IN = (945,)         # MIDI "IN" DIN jack (only one on real hardware)
+V5_PORT_X_MIDI_THRU = (1130,)
+V5_PORT_X_MIDI_OUT = (1320,)
+V5_PORT_LAN = (1510,)
+V5_PORT_USB_3 = (1673,)
+V5_PORT_USB_2 = (1840,)
+V5_PORT_USB_B = (2000,)
+
 
 # ------------------------------------------------------------------------------
 # Zynthian Touchscreen Keypad V5 Class
@@ -301,8 +308,15 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         # cable lands under its actual matching port icon in the render
         # instead of being evenly spread with no relation to the artwork.
         # x-anchors were measured directly off the vendored PNG (brightness
-        # clustering across the top port-icon row), not eyeballed: speaker
-        # jacks 1/2, mic/audio-in jacks 1/2, MIDI "IN" DIN jack.
+        # clustering across the top port-icon row) and corrected by hand
+        # against the live render (see V5_PORT_X_* above).
+        #
+        # MIDI THRU and the USB/USB-B ports have anchors reserved above but
+        # aren't wired to a real "is this actually connected" check yet -
+        # unlike audio/MIDI (JACK ports) and LAN (a real interface-up
+        # check), there's no honest signal available for them from here
+        # without more investigation, and showing a cable that doesn't
+        # reflect reality would defeat the point of this style.
         groups = []
         try:
             import zynautoconnect
@@ -312,11 +326,37 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
             midi_in = [(dev.aliases[0] if dev.aliases else dev.name, zynthian_gui_config.color_midi)
                        for dev in zynautoconnect.devices_in if dev is not None]
             groups.append((midi_in, V5_PORT_X_MIDI_IN))
+            midi_out = [(dev.aliases[0] if dev.aliases else dev.name, zynthian_gui_config.color_midi)
+                        for dev in zynautoconnect.devices_out if dev is not None]
+            groups.append((midi_out, V5_PORT_X_MIDI_OUT))
             audio_out = [(dst.aliases[0] if dst.aliases else dst.name, zynthian_gui_config.color_alt2)
                          for dst in zynautoconnect.get_hw_audio_dst_ports()]
             groups.append((audio_out, V5_PORT_X_AUDIO_OUT))
         except Exception as e:
             logging.warning(f"Can't read connection ports for connection display => {e}")
+
+        try:
+            import psutil
+            import socket
+            lan = []
+            stats = psutil.net_if_stats()
+            addrs = psutil.net_if_addrs()
+            for name, if_addrs in addrs.items():
+                # "LAN" here means "reachable over the network at all" (a
+                # wired cable, WiFi, doesn't matter) - if webconf could be
+                # opened from a browser on this network, that's the point
+                # this port represents, per user clarification. Excludes
+                # loopback/virtual interfaces, and requires a real assigned
+                # IPv4/IPv6 address, not just "administratively up".
+                if name.startswith(("docker", "veth", "br-", "lo")):
+                    continue
+                if name not in stats or not stats[name].isup:
+                    continue
+                if any(a.family in (socket.AF_INET, socket.AF_INET6) for a in if_addrs):
+                    lan.append((name, zynthian_gui_config.color_ml))
+            groups.append((lan, V5_PORT_LAN))
+        except Exception as e:
+            logging.warning(f"Can't read network interfaces for connection display => {e}")
 
         items = []  # list of (label, colour, cx), positioned per group
         for members, anchors in groups:
@@ -330,14 +370,19 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
                     cx = anchors[-1] + 24 * (i - len(anchors) + 1)
                 items.append((label, color, cx))
 
+        top_y = 25  # leave a small margin before the cable line starts
+        text_y = (top_y + self.cable_margin) // 2
         for label, color, cx in items:
-            line_id = self.create_line(cx, 0, cx, self.cable_margin - 2,
+            line_id = self.create_line(cx, top_y, cx, self.cable_margin - 2,
                                         fill=color, width=3, tags="v5_connections")
             plug_id = self.create_oval(cx - 5, self.cable_margin - 10, cx + 5, self.cable_margin,
                                         fill=color, outline="", tags="v5_connections")
-            text_id = self.create_text(cx, self.cable_margin // 2, text=label,
+            # Wrap long labels instead of letting them overlap neighbouring
+            # cables - width is pixel-based, tuned to wrap at roughly 16
+            # characters for this font/size.
+            text_id = self.create_text(cx, text_y, text=label, width=100,
                                         fill="#000000", font=(zynthian_gui_config.font_family, 9),
-                                        tags="v5_connections")
+                                        justify=tkinter.CENTER, tags="v5_connections")
             self.connection_slots.append((line_id, plug_id, text_id))
 
     def refresh_connections(self):
