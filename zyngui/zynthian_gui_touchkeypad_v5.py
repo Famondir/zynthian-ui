@@ -323,10 +323,10 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         #
         # MIDI THRU and the USB/USB-B ports have anchors reserved above but
         # aren't wired to a real "is this actually connected" check yet -
-        # unlike audio/MIDI (JACK ports) and LAN (a real interface-up
-        # check), there's no honest signal available for them from here
-        # without more investigation, and showing a cable that doesn't
-        # reflect reality would defeat the point of this style.
+        # unlike audio/MIDI (JACK ports) and LAN, there's no honest signal
+        # available for them from here without more investigation, and
+        # showing a cable that doesn't reflect reality would defeat the
+        # point of this style.
         groups = []
         try:
             import zynautoconnect
@@ -345,60 +345,66 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         except Exception as e:
             logging.warning(f"Can't read connection ports for connection display => {e}")
 
-        try:
-            import psutil
-            import socket
-            lan = []
-            stats = psutil.net_if_stats()
-            addrs = psutil.net_if_addrs()
-            for name, if_addrs in addrs.items():
-                # "LAN" here means "reachable over the network at all" (a
-                # wired cable, WiFi, doesn't matter) - if webconf could be
-                # opened from a browser on this network, that's the point
-                # this port represents, per user clarification. Excludes
-                # loopback/virtual interfaces, and requires a real assigned
-                # IPv4/IPv6 address, not just "administratively up".
-                if name.startswith(("docker", "veth", "br-", "lo")):
-                    continue
-                if name not in stats or not stats[name].isup:
-                    continue
-                if any(a.family in (socket.AF_INET, socket.AF_INET6) for a in if_addrs):
-                    lan.append((name, zynthian_gui_config.color_ml))
-            groups.append((lan, V5_PORT_LAN))
-        except Exception as e:
-            logging.warning(f"Can't read network interfaces for connection display => {e}")
+        # LAN: a single static cable, not a live host-interface scan - this
+        # simulates the *device's* LAN port existing/being usable for local
+        # control, not this development machine's actual network setup
+        # (which might have e.g. both WiFi and a wired adapter active,
+        # irrelevant noise for what this style is showing).
+        groups.append(([("network", zynthian_gui_config.color_ml)], V5_PORT_LAN))
 
-        items = []  # list of (label, colour, cx), positioned per group
+        # Real hardware has exactly len(anchors) physical jacks per
+        # category (e.g. 1 MIDI-in DIN jack) - if more logical devices are
+        # routed there than that (e.g. 3 MIDI controllers into the one
+        # MIDI-in), they all still share that single cable; only the
+        # label becomes a numbered list instead of plain text. Distributed
+        # round-robin in the rare case a category has >1 anchor and still
+        # overflows.
+        cable_slots = []  # list of (cx, [(label, colour), ...])
         for members, anchors in groups:
-            for i, (label, color) in enumerate(members):
-                if i < len(anchors):
-                    cx = anchors[i]
-                else:
-                    # More devices of this kind than the real port has jacks
-                    # for (e.g. several MIDI controllers into one MIDI-in) -
-                    # fan the extras out to the right of the last anchor.
-                    cx = anchors[-1] + 24 * (i - len(anchors) + 1)
-                items.append((label, color, cx))
+            if not members:
+                continue
+            if len(members) <= len(anchors):
+                for i, member in enumerate(members):
+                    cable_slots.append((anchors[i], [member]))
+            else:
+                buckets = [[] for _ in anchors]
+                for i, member in enumerate(members):
+                    buckets[i % len(anchors)].append(member)
+                for anchor, bucket in zip(anchors, buckets):
+                    if bucket:
+                        cable_slots.append((anchor, bucket))
 
         # The plug end (not the top/outside end) sits 25px lower than the
         # cable-margin boundary, so it visually reaches closer into/onto the
         # device instead of stopping right at the strip's edge.
         plug_bottom = self.cable_margin + 25
-        text_y = self.cable_margin // 2
-        for label, color, cx in items:
+        font = tkfont.Font(family=zynthian_gui_config.font_family, size=9)
+        row_h = font.metrics("linespace") + 4
+        row_gap = 3
+        for cx, members in cable_slots:
+            color = members[0][1]  # one category per cable, so one colour
             line_id = self.create_line(cx, 0, cx, plug_bottom - 2,
                                         fill=color, width=3, tags="v5_connections")
             plug_id = self.create_oval(cx - 5, plug_bottom - 10, cx + 5, plug_bottom,
                                         fill=color, outline="", tags="v5_connections")
-            # Wrap long labels instead of letting them overlap neighbouring
-            # cables - width is pixel-based. Ports are ~117-152px apart
-            # (measured), so keep wrapped labels narrower than the tightest
-            # gap rather than the ~16-char rule of thumb, which could still
-            # touch a neighbour at this spacing.
-            text_id = self.create_text(cx, text_y, text=label, width=80,
-                                        fill="#000000", font=(zynthian_gui_config.font_family, 9),
-                                        justify=tkinter.CENTER, tags="v5_connections")
-            self.connection_slots.append((line_id, plug_id, text_id))
+            self.connection_slots.append((line_id, plug_id, None))
+
+            # Multiple devices sharing one physical jack: a left-aligned,
+            # numbered stack of colour-chip labels (one row per device)
+            # instead of cramming all names into one centred text block.
+            # A single device just gets one plain chip, no numbering.
+            block_h = len(members) * row_h + (len(members) - 1) * row_gap
+            y = (self.cable_margin - block_h) // 2
+            left_x = cx - 40
+            for i, (label, mcolor) in enumerate(members):
+                text = f"{i + 1}. {label}" if len(members) > 1 else label
+                text_w = font.measure(text) + 8
+                rect_id = self.create_rectangle(left_x, y, left_x + text_w, y + row_h,
+                                                 fill=mcolor, outline="", tags="v5_connections")
+                text_id = self.create_text(left_x + 4, y + row_h // 2, text=text, anchor="w",
+                                            fill="#000000", font=font, tags="v5_connections")
+                self.connection_slots.append((rect_id, text_id, None))
+                y += row_h + row_gap
 
     def refresh_connections(self):
         """ Periodically redraw the connection cables so unplugging/plugging
