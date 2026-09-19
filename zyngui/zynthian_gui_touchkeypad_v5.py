@@ -242,21 +242,19 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
 
     def draw_chassis_background(self):
         """ Bottom layer for "device"/"device_cables": a white backing
-        rectangle, exactly the render's size. Parts of the official V5
-        mockup render (zynthian-webconf's mockup player - see the V5_*
-        constants and design.md) are transparent cutouts meant to show
-        through to the page background - white in the original mockup
-        player - not our own black canvas background (which would turn
-        e.g. the panic/all-notes-off "!" icon's plate into an invisible
-        black-on-black glyph, and the device's outer silhouette margin into
-        a black halo). Drawn as its own rectangle rather than changing the
-        canvas's own bg colour, so device_cables' cable-graphics strip above
-        the render stays whatever colour the rest of the app uses.
+        covering the *whole* canvas, including device_cables' cable-graphics
+        strip above the render - matching the original zynthian-webconf
+        mockup player's page background (white), which the render's
+        transparent cutouts (the panic/all-notes-off "!" icon's plate, the
+        device's outer silhouette margin, the whole cable-graphics area) are
+        meant to show through to. Anything less than the whole canvas left
+        the cable-graphics strip on our default dark canvas colour, visibly
+        inconsistent with the now-white render area below it.
         """
 
-        w, h = V5_IMAGE_SIZE
-        self.create_rectangle(0, self.cable_margin, w, self.cable_margin + h,
-                               fill="#ffffff", outline="", tags="v5_chassis")
+        w = V5_IMAGE_SIZE[0]
+        h = V5_IMAGE_SIZE[1] + self.cable_margin
+        self.create_rectangle(0, 0, w, h, fill="#ffffff", outline="", tags="v5_chassis")
 
         if self.cable_margin:
             self.create_line(0, self.cable_margin, V5_IMAGE_SIZE[0], self.cable_margin,
@@ -305,7 +303,7 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
                                         fill=zynthian_gui_config.color_hl, outline="",
                                         tags="v5_connections")
             text_id = self.create_text(cx, self.cable_margin // 2, text=label,
-                                        fill=self.text_color, font=(zynthian_gui_config.font_family, 9),
+                                        fill="#000000", font=(zynthian_gui_config.font_family, 9),
                                         tags="v5_connections")
             self.connection_slots.append((line_id, plug_id, text_id))
 
