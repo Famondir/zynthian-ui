@@ -107,7 +107,14 @@ class zynthian_engine_fluidsynth(zynthian_engine):
 -o synth.reverb.active=0".format(self.jackname, self.jackname)
 
         self.command = "fluidsynth -a jack -m jack -g 1 {}".format(self.fs_options)
-        self.command_prompt = "\n> "
+        # This distro's fluidsynth (built against a newer readline/libedit)
+        # wraps its prompt in bracketed-paste-mode ANSI escape sequences
+        # (e.g. "\r\n\x1b[?2004l\r\x1b[?2004h> "), with slightly different
+        # escape/CR combinations depending on the command. Rather than
+        # chase every variant, drop the "\n" anchor and just look for the
+        # literal prompt text - same approach already used by the sfizz and
+        # jalv engines' command_prompt.
+        self.command_prompt = "> "
 
         self.start()
         self.reset()
@@ -385,7 +392,10 @@ class zynthian_engine_fluidsynth(zynthian_engine):
             cre = re.compile(r"loaded SoundFont has ID (\d+)")
             for line in output.split("\n"):
                 # logging.debug(f" => {line}")
-                res = cre.match(line)
+                # search(), not match(): a leading ANSI escape/CR on the line
+                # (bracketed-paste mode) would make an anchored match() fail
+                # even though the success message is right there.
+                res = cre.search(line)
                 if res:
                     sfi = int(res.group(1))
             # If soundfont was loaded succesfully ...
