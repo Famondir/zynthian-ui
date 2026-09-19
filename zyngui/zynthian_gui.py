@@ -577,8 +577,11 @@ class zynthian_gui:
         self.osc_init()
 
         # Run debug thread
-        if zynthian_gui_config.debug_thread:
-            self.start_debug_thread()
+        # Disabled for desktop testing: this drops straight into pdb via
+        # breakpoint() as soon as it starts, which we don't want here.
+        # We still want the "Exit" item this flag shows in the Admin menu.
+        # if zynthian_gui_config.debug_thread:
+        #     self.start_debug_thread()
 
         # Initial loading screen. We need "current_screen" from here ...
         self.show_loading("Starting User Interface")
