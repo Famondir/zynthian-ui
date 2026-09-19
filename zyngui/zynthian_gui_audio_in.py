@@ -84,6 +84,12 @@ class zynthian_gui_audio_in(zynthian_gui_selector_info):
         super().fill_listbox()
 
     def select_action(self, i, t='S'):
+        if i >= len(self.list_data):
+            # The capture port list can be rebuilt by refresh_status() between
+            # a row being selected and the switch/click being processed
+            # (e.g. right after opening this screen, while ports are still
+            # settling), leaving a stale, now out-of-range index.
+            return
         if t == 'S':
             chain = self.chain if self.chain else self.zyngui.chain_manager.active_chain
             chain.toggle_audio_in(self.list_data[i][0])
