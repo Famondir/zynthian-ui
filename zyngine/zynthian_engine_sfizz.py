@@ -138,7 +138,7 @@ class zynthian_engine_sfizz(zynthian_engine_sfz):
                     f = sd
                     filehead, filetail = os.path.split(f)
                     filename, filext = os.path.splitext(f)
-                    if filext.lower() == ".sfz" and not exclude_sfz.fullmatch(filetail):
+                    if filext[1:].lower() in cls.preset_fexts and not exclude_sfz.fullmatch(filetail):
                         filename = filename[len(preset_dpath) + 1:]
                         title = filename.replace('_', ' ')
                         engine = filext[1:].lower()
