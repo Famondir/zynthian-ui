@@ -70,6 +70,18 @@ V5_BUTTON_SIZE = (110, 105)
 V5_LED_GROUP = (133, 208)                      # per-button status dot, same col/row grid
 V5_LED_RADIUS = 30
 
+# Top-edge port-icon x-positions, NOT from index.html (the mockup player has
+# no interactive elements there) but measured directly off the vendored PNG:
+# scanned a horizontal band across the port-icon row (y=55-115) for bright/
+# opaque pixel clusters (the white line-art icons/labels against the dark
+# chassis), then grouped clusters within ~45px of each other into the
+# physical port groups visible in the render, left to right: headphone,
+# speaker jacks 1/2, mic/audio-in jacks 1/2, MIDI IN/THRU/OUT, ethernet,
+# USB, USB, boot-select, power.
+V5_PORT_X_AUDIO_OUT = (157, 353)   # speaker jacks 1/2
+V5_PORT_X_AUDIO_IN = (506, 623)    # mic/audio-in jacks 1/2
+V5_PORT_X_MIDI_IN = (756,)         # MIDI "IN" DIN jack (only one on real hardware)
+
 # ------------------------------------------------------------------------------
 # Zynthian Touchscreen Keypad V5 Class
 # ------------------------------------------------------------------------------
@@ -285,33 +297,40 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
 
         if not self.cable_margin:
             return
-        items = []  # list of (label, colour)
+        # Groups of (label, colour), one group per port category, so each
+        # cable lands under its actual matching port icon in the render
+        # instead of being evenly spread with no relation to the artwork.
+        # x-anchors were measured directly off the vendored PNG (brightness
+        # clustering across the top port-icon row), not eyeballed: speaker
+        # jacks 1/2, mic/audio-in jacks 1/2, MIDI "IN" DIN jack.
+        groups = []
         try:
             import zynautoconnect
-            for scp in zynautoconnect.get_audio_capture_ports():
-                label = scp.aliases[0] if scp.aliases else scp.name
-                items.append((label, zynthian_gui_config.color_hl))
-            for dev in zynautoconnect.devices_in:
-                if dev is None:
-                    continue
-                label = dev.aliases[0] if dev.aliases else dev.name
-                items.append((label, zynthian_gui_config.color_midi))
-            for dst in zynautoconnect.get_hw_audio_dst_ports():
-                label = dst.aliases[0] if dst.aliases else dst.name
-                items.append((label, zynthian_gui_config.color_alt2))
+            audio_in = [(scp.aliases[0] if scp.aliases else scp.name, zynthian_gui_config.color_hl)
+                        for scp in zynautoconnect.get_audio_capture_ports()]
+            groups.append((audio_in, V5_PORT_X_AUDIO_IN))
+            midi_in = [(dev.aliases[0] if dev.aliases else dev.name, zynthian_gui_config.color_midi)
+                       for dev in zynautoconnect.devices_in if dev is not None]
+            groups.append((midi_in, V5_PORT_X_MIDI_IN))
+            audio_out = [(dst.aliases[0] if dst.aliases else dst.name, zynthian_gui_config.color_alt2)
+                         for dst in zynautoconnect.get_hw_audio_dst_ports()]
+            groups.append((audio_out, V5_PORT_X_AUDIO_OUT))
         except Exception as e:
             logging.warning(f"Can't read connection ports for connection display => {e}")
 
-        # Even spacing across however many items there actually are (not a
-        # fixed hypothetical slot count), capped so a lot of MIDI devices
-        # doesn't cram the strip unreadably.
-        max_slots = 8
-        items = items[:max_slots]
-        if not items:
-            return
-        slot_width = V5_IMAGE_SIZE[0] // len(items)
-        for i, (label, color) in enumerate(items):
-            cx = slot_width * i + slot_width // 2
+        items = []  # list of (label, colour, cx), positioned per group
+        for members, anchors in groups:
+            for i, (label, color) in enumerate(members):
+                if i < len(anchors):
+                    cx = anchors[i]
+                else:
+                    # More devices of this kind than the real port has jacks
+                    # for (e.g. several MIDI controllers into one MIDI-in) -
+                    # fan the extras out to the right of the last anchor.
+                    cx = anchors[-1] + 24 * (i - len(anchors) + 1)
+                items.append((label, color, cx))
+
+        for label, color, cx in items:
             line_id = self.create_line(cx, 0, cx, self.cable_margin - 2,
                                         fill=color, width=3, tags="v5_connections")
             plug_id = self.create_oval(cx - 5, self.cable_margin - 10, cx + 5, self.cable_margin,
