@@ -88,24 +88,24 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         else:
             self.top_margin = 0
 
-        if self.style == "standard":
-            # Deliberately keep the exact same screen width/height budget as
-            # classic (4 narrower columns instead of classic's 2 wider ones,
-            # same total panel_width) - any deviation from classic's screen
-            # box, in either dimension, was observed to break other screens'
-            # icon/text layout (e.g. "Add Chain"), which scale icons to the
-            # available cell size independently of the fixed-size label
-            # text. device/device_cables accept that trade-off deliberately
-            # for bigger, more authentic proportions (and will be re-tuned
-            # against the real chassis render instead - see design.md).
-            self.button_width = zynthian_gui_config.display_width // 20
-            self.button_height = zynthian_gui_config.display_height // 6
-            self.panel_width = (zynthian_gui_config.display_width // 10) * 2
-        elif self.style == "classic":
+        if self.style == "classic":
             self.button_width = zynthian_gui_config.display_width // 10
             self.button_height = zynthian_gui_config.display_height // 6
             self.panel_width = self.button_width * 2
         else:
+            # standard/device/device_cables: buttons always fill the full
+            # available height (top_margin..display_height) with no gap -
+            # the screen area matches this exactly too (see
+            # zynthian_gui_config.set_touch_keypad), so there's never a
+            # black strip below either. To ALSO make standard's screen box
+            # exactly match classic's (avoiding the icon/text overlap other
+            # screens get when the screen aspect ratio changes - see
+            # design.md), run_zynthian.sh pre-adjusts DISPLAY_WIDTH/
+            # DISPLAY_HEIGHT for standard so that this plain formula lands
+            # on classic's exact screen_width/screen_height. device/
+            # device_cables only get the width adjustment for now (bigger,
+            # more authentic proportions - to be re-tuned against the real
+            # chassis render instead, see design.md).
             self.button_width = zynthian_gui_config.display_width // 10
             self.button_height = (zynthian_gui_config.display_height - self.top_margin) // 5
             self.panel_width = self.button_width * 4
