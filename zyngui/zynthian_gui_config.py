@@ -781,10 +781,16 @@ if "zynthian_main.py" in sys.argv[0]:
                 main_x = panel_width
             main_y = top_margin
             screen_width = display_width - panel_width
-            if top_margin:
-                screen_height = 5 * touch_keypad.button_height
-            else:
+            if touch_keypad.style == "classic":
+                # classic's last row is a distinct 10-button "mega-row" that
+                # intentionally peeks out below the screen, matching the
+                # original upstream look.
                 screen_height = 5 * display_height // 6
+            else:
+                # standard/device/device_cables' last row is just a regular
+                # part of the uniform 4x5 grid, so the screen should use the
+                # full button-grid height instead of leaving a gap below it.
+                screen_height = 5 * touch_keypad.button_height
             touch_shown = 1
         else:
             main_x = 0
