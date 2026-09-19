@@ -68,7 +68,7 @@ V5_BUTTON_COLS = (50, 172, 294, 416)
 V5_BUTTON_ROWS = (50, 165, 275, 390, 505)
 V5_BUTTON_SIZE = (110, 105)
 V5_LED_GROUP = (133, 208)                      # per-button status dot, same col/row grid
-V5_LED_RADIUS = 8
+V5_LED_RADIUS = 30
 
 # ------------------------------------------------------------------------------
 # Zynthian Touchscreen Keypad V5 Class
@@ -140,7 +140,7 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         self.place(x=0, y=0)
 
         if self.style in ("device", "device_cables"):
-            self.draw_chassis_device()
+            self.draw_chassis_background()
 
         self.buttons = [
             # default label, alt label, rectangle id, text id, image id, image, tk image, led state, led id
@@ -208,10 +208,25 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
                 else:
                     self.x_offset = zynthian_gui_config.display_width - self.button_width * 4
 
-        draw_fn = self.draw_button_device if self.style in ("device", "device_cables") else self.draw_button
-        for row, row_data in enumerate(layout):
-            for column, button in enumerate(row_data):
-                draw_fn(row, column, button)
+        if self.style in ("device", "device_cables"):
+            # Z-order matters: LED dots first (bottom), then the chassis
+            # image on top of them (its per-button areas are transparent/
+            # semi-transparent cutouts that let only a small "window" of
+            # each LED dot show through - verified against the actual PNG
+            # alpha data, matching the real mockup's own leds-then-image
+            # SVG order), then invisible hit-areas/press-outline on top of
+            # everything so they stay clickable/visible.
+            for row, row_data in enumerate(layout):
+                for column, button in enumerate(row_data):
+                    self.draw_button_led(row, column, button)
+            self.draw_chassis_image()
+            for row, row_data in enumerate(layout):
+                for column, button in enumerate(row_data):
+                    self.draw_button_hitarea(row, column, button)
+        else:
+            for row, row_data in enumerate(layout):
+                for column, button in enumerate(row_data):
+                    self.draw_button(row, column, button)
 
         # update with user settings from the environment
         self.apply_user_config()
@@ -225,38 +240,42 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
             # import note above draw_connections()).
             self.after(1000, self.refresh_connections)
 
-    def draw_chassis_device(self):
-        """ Draw the official V5 mockup render (from zynthian-webconf's
-        mockup player - see the V5_* constants and design.md) as the
-        background, at (0, cable_margin) so device_cables has room above it
-        for connection cables. The image already has the button
-        labels/legends and port icons baked in - we only overlay invisible
-        clickable hit-areas (draw_button_device) and per-button backlight
-        glow circles on top of it.
+    def draw_chassis_background(self):
+        """ Bottom layer for "device"/"device_cables": a white backing
+        rectangle, exactly the render's size. Parts of the official V5
+        mockup render (zynthian-webconf's mockup player - see the V5_*
+        constants and design.md) are transparent cutouts meant to show
+        through to the page background - white in the original mockup
+        player - not our own black canvas background (which would turn
+        e.g. the panic/all-notes-off "!" icon's plate into an invisible
+        black-on-black glyph, and the device's outer silhouette margin into
+        a black halo). Drawn as its own rectangle rather than changing the
+        canvas's own bg colour, so device_cables' cable-graphics strip above
+        the render stays whatever colour the rest of the app uses.
+        """
+
+        w, h = V5_IMAGE_SIZE
+        self.create_rectangle(0, self.cable_margin, w, self.cable_margin + h,
+                               fill="#ffffff", outline="", tags="v5_chassis")
+
+        if self.cable_margin:
+            self.create_line(0, self.cable_margin, V5_IMAGE_SIZE[0], self.cable_margin,
+                              fill=self.border_color, width=2, tags="v5_chassis")
+
+    def draw_chassis_image(self):
+        """ Draw the render on top of the LED dots (drawn earlier - see
+        draw_button_led()): the render's per-button areas are transparent/
+        semi-transparent cutouts that let only a small "window" of each LED
+        dot show through, verified against the actual PNG alpha data and
+        matching the real mockup's own leds-then-image SVG order. Hit-areas
+        are drawn afterwards, on top (see draw_button_hitarea()).
         """
 
         icons_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons")
         image_path = os.path.join(icons_dir, V5_IMAGE_PATH)
         self.chassis_image = Image.open(image_path)
         self.chassis_tkimage = ImageTk.PhotoImage(self.chassis_image)
-
-        # The render's background/silhouette margin AND some overlay icons
-        # (e.g. the panic/all-notes-off "!" button) are transparent cutouts
-        # meant to show through to the page background - white in the
-        # original zynthian-webconf mockup player. Our canvas defaults to a
-        # black background, which turned those cutouts solid black (an
-        # invisible "!" glyph, a black halo around the device). A white
-        # backing rectangle, exactly the image's size, restores the
-        # intended look regardless of our own bg colour elsewhere on this
-        # canvas (e.g. device_cables' cable-graphics strip stays dark).
-        w, h = V5_IMAGE_SIZE
-        self.create_rectangle(0, self.cable_margin, w, self.cable_margin + h,
-                               fill="#ffffff", outline="", tags="v5_chassis")
         self.create_image(0, self.cable_margin, anchor="nw", image=self.chassis_tkimage, tags="v5_chassis")
-
-        if self.cable_margin:
-            self.create_line(0, self.cable_margin, V5_IMAGE_SIZE[0], self.cable_margin,
-                              fill=self.border_color, width=2, tags="v5_chassis")
 
     def draw_connections(self):
         """ "device_cables" style: draw a labelled cable line coming down
@@ -299,13 +318,32 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         self.draw_connections()
         self.after(3000, self.refresh_connections)
 
-    def draw_button_device(self, row, column, button):
-        """ "device"/"device_cables" style: the button's face/label is
-        already part of the chassis render, so this only adds an invisible
-        clickable hit-area (a fully transparent image - Tkinter hit-tests
-        images by their bounding box regardless of pixel transparency,
-        unlike an unfilled rectangle, which only hit-tests its outline) plus
-        a per-button backlight glow circle for LED-style feedback.
+    def draw_button_led(self, row, column, button):
+        """ "device"/"device_cables" style, layer 1 (bottom, drawn before
+        the chassis image): a backlight dot per button. The image drawn on
+        top of this (draw_chassis_image()) has a transparent/semi-
+        transparent cutout at this exact position for most buttons, so only
+        a small "window" of this dot ends up visible - matching the real
+        mockup's own leds-then-image z-order. set_button_color() re-fills
+        this to reflect the wsled colour.
+        """
+
+        try:
+            config = self.buttons[button]
+        except IndexError:
+            return
+        lx = V5_LED_GROUP[0] + V5_BUTTON_COLS[column]
+        ly = self.cable_margin + V5_LED_GROUP[1] + V5_BUTTON_ROWS[row]
+        r = V5_LED_RADIUS
+        config[LED_ID] = self.create_oval(lx - r, ly - r, lx + r, ly + r,
+                                           fill="#505050", outline="")
+
+    def draw_button_hitarea(self, row, column, button):
+        """ "device"/"device_cables" style, layer 2 (top, drawn after the
+        chassis image): an invisible clickable hit-area (a fully
+        transparent image - Tkinter hit-tests images by their bounding box
+        regardless of pixel transparency, unlike an unfilled rectangle,
+        which only hit-tests its outline) plus a hidden press-outline.
         """
 
         try:
@@ -317,12 +355,6 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         y = self.cable_margin + gy + V5_BUTTON_ROWS[row]
         w, h = V5_BUTTON_SIZE
         tag = f"v5_button_{button}"
-
-        lx = V5_LED_GROUP[0] + V5_BUTTON_COLS[column]
-        ly = self.cable_margin + V5_LED_GROUP[1] + V5_BUTTON_ROWS[row]
-        r = V5_LED_RADIUS
-        config[LED_ID] = self.create_oval(lx - r, ly - r, lx + r, ly + r,
-                                           fill="#505050", outline="", tags=tag)
 
         hit_image = ImageTk.PhotoImage(Image.new("RGBA", (w, h), (0, 0, 0, 0)))
         config[TKIMG] = hit_image  # keep a reference or Tk garbage-collects it
