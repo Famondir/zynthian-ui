@@ -255,10 +255,10 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         w = V5_IMAGE_SIZE[0]
         h = V5_IMAGE_SIZE[1] + self.cable_margin
         self.create_rectangle(0, 0, w, h, fill="#ffffff", outline="", tags="v5_chassis")
-
-        if self.cable_margin:
-            self.create_line(0, self.cable_margin, V5_IMAGE_SIZE[0], self.cable_margin,
-                              fill=self.border_color, width=2, tags="v5_chassis")
+        # No separator line between the cable-graphics strip and the render:
+        # both are the same white now (see the docstring above), so a drawn
+        # line just reads as an unwanted black seam across an otherwise
+        # seamless white background.
 
     def draw_chassis_image(self):
         """ Draw the render on top of the LED dots (drawn earlier - see
@@ -277,31 +277,45 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
 
     def draw_connections(self):
         """ "device_cables" style: draw a labelled cable line coming down
-        from outside the top edge for every audio capture port that is
-        actually present, so what's physically plugged into this machine
-        is visible at a glance instead of buried in the Audio Input screen.
+        from outside the top edge for every audio/MIDI capture port and
+        audio output port that is actually present, so what's physically
+        plugged into this machine is visible at a glance instead of buried
+        in the Audio Input screen (which only ever showed audio inputs).
         """
 
         if not self.cable_margin:
             return
+        items = []  # list of (label, colour)
         try:
             import zynautoconnect
-            ports = zynautoconnect.get_audio_capture_ports()
+            for scp in zynautoconnect.get_audio_capture_ports():
+                label = scp.aliases[0] if scp.aliases else scp.name
+                items.append((label, zynthian_gui_config.color_hl))
+            for dev in zynautoconnect.devices_in:
+                if dev is None:
+                    continue
+                label = dev.aliases[0] if dev.aliases else dev.name
+                items.append((label, zynthian_gui_config.color_midi))
+            for dst in zynautoconnect.get_hw_audio_dst_ports():
+                label = dst.aliases[0] if dst.aliases else dst.name
+                items.append((label, zynthian_gui_config.color_alt2))
         except Exception as e:
-            logging.warning(f"Can't read capture ports for connection display => {e}")
-            ports = []
+            logging.warning(f"Can't read connection ports for connection display => {e}")
 
-        max_slots = 6
-        slot_width = V5_IMAGE_SIZE[0] // max_slots
-        for i, scp in enumerate(ports[:max_slots]):
+        # Even spacing across however many items there actually are (not a
+        # fixed hypothetical slot count), capped so a lot of MIDI devices
+        # doesn't cram the strip unreadably.
+        max_slots = 8
+        items = items[:max_slots]
+        if not items:
+            return
+        slot_width = V5_IMAGE_SIZE[0] // len(items)
+        for i, (label, color) in enumerate(items):
             cx = slot_width * i + slot_width // 2
-            label = scp.aliases[0] if scp.aliases else scp.name
             line_id = self.create_line(cx, 0, cx, self.cable_margin - 2,
-                                        fill=zynthian_gui_config.color_hl, width=3,
-                                        tags="v5_connections")
+                                        fill=color, width=3, tags="v5_connections")
             plug_id = self.create_oval(cx - 5, self.cable_margin - 10, cx + 5, self.cable_margin,
-                                        fill=zynthian_gui_config.color_hl, outline="",
-                                        tags="v5_connections")
+                                        fill=color, outline="", tags="v5_connections")
             text_id = self.create_text(cx, self.cable_margin // 2, text=label,
                                         fill="#000000", font=(zynthian_gui_config.font_family, 9),
                                         tags="v5_connections")
