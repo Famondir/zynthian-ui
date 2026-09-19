@@ -239,6 +239,19 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         image_path = os.path.join(icons_dir, V5_IMAGE_PATH)
         self.chassis_image = Image.open(image_path)
         self.chassis_tkimage = ImageTk.PhotoImage(self.chassis_image)
+
+        # The render's background/silhouette margin AND some overlay icons
+        # (e.g. the panic/all-notes-off "!" button) are transparent cutouts
+        # meant to show through to the page background - white in the
+        # original zynthian-webconf mockup player. Our canvas defaults to a
+        # black background, which turned those cutouts solid black (an
+        # invisible "!" glyph, a black halo around the device). A white
+        # backing rectangle, exactly the image's size, restores the
+        # intended look regardless of our own bg colour elsewhere on this
+        # canvas (e.g. device_cables' cable-graphics strip stays dark).
+        w, h = V5_IMAGE_SIZE
+        self.create_rectangle(0, self.cable_margin, w, self.cable_margin + h,
+                               fill="#ffffff", outline="", tags="v5_chassis")
         self.create_image(0, self.cable_margin, anchor="nw", image=self.chassis_tkimage, tags="v5_chassis")
 
         if self.cable_margin:
