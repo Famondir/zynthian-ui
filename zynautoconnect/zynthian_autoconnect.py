@@ -719,7 +719,7 @@ def midi_autoconnect():
             busy_idevs.append(devnum)
 
             # Enable external MIDI-clock sync for the configured device
-            if devices_in[devnum].aliases[0] == ext_clock_device_name:
+            if devices_in[devnum].aliases and devices_in[devnum].aliases[0] == ext_clock_device_name:
                 ext_clock_zmip = devnum
 
             # Try to connect ctrldev driver's RT MIDI processor between input device and zmip
