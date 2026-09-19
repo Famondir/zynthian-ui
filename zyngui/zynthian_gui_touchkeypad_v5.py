@@ -37,8 +37,12 @@ except:
     cairosvg = None
 
 # Zynthian specific modules
-import zynautoconnect
 from zyngui import zynthian_gui_config
+# zynautoconnect is imported lazily (see draw_connections) - this class is
+# built from inside zynthian_gui_config's own module-level init, well before
+# zynautoconnect's lib_zyncore_init() has run; importing zynautoconnect here
+# would make it cache a still-None lib_zyncore permanently (it reads the
+# value once at import time via "from zyncoder.zyncore import lib_zyncore").
 
 LABEL       = 0
 ALT_LABEL   = 1
@@ -142,7 +146,12 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
 
         if self.style == "device_cables":
             self.connection_slots = []
-            self.refresh_connections()
+            # Deferred via after(): this object is built from inside
+            # zynthian_gui_config's own module-level init, before jackd/
+            # zynautoconnect are up, so the first real refresh has to wait
+            # until the Tk mainloop is running (see the zynautoconnect
+            # import note above draw_connections()).
+            self.after(1000, self.refresh_connections)
 
     def draw_chassis(self):
         """ Draw the "device" style chassis background: a distinct panel
@@ -183,6 +192,7 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         if not self.top_margin:
             return
         try:
+            import zynautoconnect
             ports = zynautoconnect.get_audio_capture_ports()
         except Exception as e:
             logging.warning(f"Can't read capture ports for connection display => {e}")
