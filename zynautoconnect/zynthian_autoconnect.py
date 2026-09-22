@@ -137,7 +137,15 @@ for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             cmdline = proc.info['cmdline']
             for param in cmdline:
                 if param.startswith("hw:"):
-                    jack_audio_device = param[3:]
+                    # Strip any ",N" subdevice suffix (e.g. "hw:sofhdadsp,0"
+                    # -> "sofhdadsp") so this matches get_alsa_audio_devices()'s
+                    # bare card names below - real hardware's single-device
+                    # cards (e.g. "hw:sndrpihifiberry") never had a suffix to
+                    # strip, but a multi-device onboard card (as used by a
+                    # laptop's built-in codec) does, and without stripping it
+                    # the card jackd already owns wouldn't be recognised as
+                    # excluded from the hotplug bridge scan.
+                    jack_audio_device = param[3:].split(",")[0]
                     break
     except:
         pass
@@ -651,7 +659,21 @@ def update_hw_midi_ports(force=False):
             hw_midi_dst_ports += ports
         except:
             pass
-    for port_name in ("QmidiNet:out", "jackrtpmidid:rtpmidi_out", "jacknetumpd:netump_out", "RtMidiOut Client:TouchOSC Bridge", "aubio"):
+    # a2j:(MIDI Out|VMPK...) - VMPK's ALSA client, bridged by a2jmidid.
+    # a2jmidid only marks bridge ports JackPortIsPhysical for kernel-type
+    # ALSA clients (real/virtual hardware) - VMPK is a type=user ALSA-seq
+    # client, so its bridged port never gets is_physical=True and is
+    # otherwise invisible to hw_midi_src_ports. get_ports() matches by
+    # regex (not plain substring), so this one pattern covers both VMPK's
+    # built-in pre-config-file default client name ("MIDI Out", seen on a
+    # first launch with no ~/.config/vmpk.sourceforge.net/VMPK.conf yet)
+    # and its own self-chosen default once that config exists
+    # ("VMPK Output", VMPK.conf's PublicNameOUT - empirically NOT the same
+    # string, and user-renamable, hence matching the "VMPK" prefix rather
+    # than hardcoding one exact name). Also matches regardless of VMPK's
+    # per-launch ALSA client number suffix (e.g. "MIDI Out [128] (capture):
+    # [0] out").
+    for port_name in ("QmidiNet:out", "jackrtpmidid:rtpmidi_out", "jacknetumpd:netump_out", "RtMidiOut Client:TouchOSC Bridge", "aubio", "a2j:(MIDI Out|VMPK)"):
         try:
             ports = jclient.get_ports(port_name, is_midi=True, is_output=True)
             hw_midi_src_ports += ports
