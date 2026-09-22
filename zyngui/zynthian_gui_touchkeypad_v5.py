@@ -59,13 +59,17 @@ BOLD_TIMER_ID = 11  # pending after() job id for the Bold-colour outline change,
 LONG_TIMER_ID = 12  # pending after() job id for the Long-colour outline change, or None
 
 # Per-knob canvas-item slots (parallel to the button LABEL/RECT_ID/etc
-# indices above, but knobs have no label/LED/press-duration-colour state -
-# their face is fixed artwork and press timing/classification is handled
-# entirely by the existing zynswitch CUIA thread, not locally).
+# indices above; knobs have no label/LED state - their face is fixed
+# artwork and press classification (short/bold/long) is handled entirely
+# by the existing zynswitch CUIA thread, not locally - but the press-outline
+# DOES mirror the buttons' live Bold/Long colour feedback, see
+# KNOB_BOLD_TIMER_ID/KNOB_LONG_TIMER_ID below).
 KNOB_TKIMG      = 0  # hit-area PhotoImage (kept alive - Tk garbage-collects it otherwise)
 KNOB_HIT_ID     = 1  # hit-area canvas image id
 KNOB_PRESS_ID   = 2  # press-outline oval id (hidden until clicked)
 KNOB_HOVER_ID   = 3  # hover-ring oval id, or None while not hovered
+KNOB_BOLD_TIMER_ID = 4  # pending after() job id for the Bold-colour outline change, or None
+KNOB_LONG_TIMER_ID = 5  # pending after() job id for the Long-colour outline change, or None
 
 # Real V5 mockup coordinates, lifted from zynthian-webconf's mockup player
 # (mockup/index.html, viewBox "0 0 1920 1000" over the 1910x960 render) -
@@ -278,7 +282,7 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
                     self.draw_button_hitarea(row, column, button)
             # Knob hit-areas go on top of everything else, same as the
             # button hit-areas - see draw_knob_device().
-            self.knobs = [[None, None, None, None] for _ in range(4)]
+            self.knobs = [[None, None, None, None, None, None] for _ in range(4)]
             for i in range(4):
                 self.draw_knob_device(i)
         else:
@@ -618,10 +622,12 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         """ Mirrors cb_button_push(): the knob's push-button is zynswitch
         index `index` directly - no "+4" offset, since that offset only
         exists to keep the 20 keypad buttons out of the 4 encoder
-        switches' reserved index range (0-3). Short/bold/long press timing
-        and whatever function is currently bound to that switch index are
-        handled entirely by the existing CUIA thread (zynthian_gui.py),
-        not duplicated here - only the press-outline is local state.
+        switches' reserved index range (0-3). Short/bold/long press
+        *classification/dispatch* is handled entirely by the existing CUIA
+        thread (zynthian_gui.py), not duplicated here - only the
+        press-outline's live colour feedback (yellow -> Bold -> Long) is
+        local state, mirroring cb_button_push()'s BOLD_TIMER_ID/
+        LONG_TIMER_ID pattern exactly.
         """
 
         config = self.knobs[index]
@@ -629,14 +635,42 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         # This is exactly what the real crash (click-triggered, not just
         # hover) turned out to be: revealing the press-outline as "normal"
         # made IT win "current item" over the hit-area, which fed back
-        # into the hover ring the same way.
-        self.itemconfig(config[KNOB_PRESS_ID], state="disabled")
+        # into the hover ring the same way. Colour (outline=) is unrelated
+        # to that bug - only `state=` affects Tk's current-item picking -
+        # so resetting it back to yellow here, and recolouring it from
+        # _set_knob_press_duration_color() below, is safe.
+        self.itemconfig(config[KNOB_PRESS_ID], state="disabled", outline="#F0F000")
+        config[KNOB_BOLD_TIMER_ID] = self.after(
+            zynthian_gui_config.zynswitch_bold_us // 1000,
+            lambda i=index: self._set_knob_press_duration_color(i, KNOB_BOLD_TIMER_ID, zynthian_gui_config.color_warn)
+        )
+        config[KNOB_LONG_TIMER_ID] = self.after(
+            zynthian_gui_config.zynswitch_long_us // 1000,
+            lambda i=index: self._set_knob_press_duration_color(i, KNOB_LONG_TIMER_ID, zynthian_gui_config.color_error)
+        )
         zynthian_gui_config.zyngui.cuia_queue.put_nowait(f"zynswitch {index},P")
+
+    def _set_knob_press_duration_color(self, index, timer_id_slot, color):
+        """ Scheduled via cb_knob_push()'s after() timers: recolours the
+        press-outline once a press-duration threshold (Bold/Long) is
+        crossed while the knob is still held. Mirrors
+        _set_press_duration_color() (buttons) exactly. Clears its own
+        timer slot first so cb_knob_release() won't try to after_cancel()
+        a job that already fired.
+        """
+
+        config = self.knobs[index]
+        config[timer_id_slot] = None
+        self.itemconfig(config[KNOB_PRESS_ID], outline=color)
 
     def cb_knob_release(self, index):
         """ See cb_knob_push(). """
 
         config = self.knobs[index]
+        for slot in (KNOB_BOLD_TIMER_ID, KNOB_LONG_TIMER_ID):
+            if config[slot] is not None:
+                self.after_cancel(config[slot])
+                config[slot] = None
         self.itemconfig(config[KNOB_PRESS_ID], state="hidden")
         zynthian_gui_config.zyngui.cuia_queue.put_nowait(f"zynswitch {index},R")
 
