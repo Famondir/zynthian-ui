@@ -97,7 +97,7 @@ V5_LED_RADIUS = 30
 # single top+spacing formula) since the render's vertical spacing isn't
 # perfectly uniform between knobs - same reasoning as V5_BUTTON_ROWS above.
 V5_KNOB_CENTER_X = 1718
-V5_KNOB_ROWS = (178, 378, 586, 799)
+V5_KNOB_ROWS = (182, 383, 584, 799)
 V5_KNOB_RADIUS = 38                            # hit-area radius; matches the visible knob face incl. its metal rim
 
 # Top-edge port-icon x-positions. Left to right on the real chassis:
