@@ -86,17 +86,19 @@ V5_LED_GROUP = (133, 208)                      # per-button status dot, same col
 V5_LED_RADIUS = 30
 
 # Rotary-encoder knob column (right of the screen), measured directly
-# against the vendored render (script-driven crop/grid-overlay, not
-# eyeballed) - see openspec/changes/touchkeypad-functional-knobs/design.md.
-# Supersedes touchkeypad-visual-styles/tasks.md task 5.14's rough
-# "(1658,125) group offset, r=52" note, which was never actually verified
-# against the pixel art. Knob index 0 is the top knob (labelled "1" in the
-# render) through index 3 (bottom, "4") - the same index space ZYNPOT/
-# ZYNSWITCH CUIAs already use for the 4 physical encoders.
-V5_KNOB_CENTER_X = 1711
-V5_KNOB_TOP_Y = 197
-V5_KNOB_SPACING_Y = 198
-V5_KNOB_RADIUS = 44                            # hit-area radius; a touch larger than the ~40px visible knob face
+# against the vendored render (script-driven pixel/edge analysis, cross-
+# checked against user-reported visual offsets, not eyeballed) - see
+# openspec/changes/touchkeypad-functional-knobs/design.md. Supersedes
+# touchkeypad-visual-styles/tasks.md task 5.14's rough "(1658,125) group
+# offset, r=52" note, which was never actually verified against the pixel
+# art. Knob index 0 is the top knob (labelled "1" in the render) through
+# index 3 (bottom, "4") - the same index space ZYNPOT/ZYNSWITCH CUIAs
+# already use for the 4 physical encoders. Per-knob Y offsets (not a
+# single top+spacing formula) since the render's vertical spacing isn't
+# perfectly uniform between knobs - same reasoning as V5_BUTTON_ROWS above.
+V5_KNOB_CENTER_X = 1718
+V5_KNOB_ROWS = (178, 378, 586, 799)
+V5_KNOB_RADIUS = 38                            # hit-area radius; matches the visible knob face incl. its metal rim
 
 # Top-edge port-icon x-positions. Left to right on the real chassis:
 # headphone, speaker jacks 1/2, mic/audio-in jacks 1/2, MIDI IN/THRU/OUT,
@@ -543,7 +545,7 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
         """
 
         cx = V5_KNOB_CENTER_X
-        cy = self.cable_margin + V5_KNOB_TOP_Y + index * V5_KNOB_SPACING_Y
+        cy = self.cable_margin + V5_KNOB_ROWS[index]
         r = V5_KNOB_RADIUS
         tag = f"v5_knob_{index}"
         config = self.knobs[index]
