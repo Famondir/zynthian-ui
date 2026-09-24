@@ -732,6 +732,7 @@ class zynthian_gui:
                 self.screens[screen].show()
             if not dummy_show:
                 self.hide_screens(exclude=screen)
+            logging.debug(f"SHOW SCREEN '{screen}'")
             zynsigman.send(zynsigman.S_GUI, zynsigman.SS_GUI_SHOW_SCREEN, screen=screen)
 
         self.screen_lock.release()
