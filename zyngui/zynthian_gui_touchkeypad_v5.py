@@ -165,7 +165,16 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
             # match V5_IMAGE_SIZE (plus this reserved cable margin) exactly
             # for these styles, so the canvas this __init__ creates above is
             # already the right size.
-            self.cable_margin = 160 if self.style == "device_cables" else 0
+            #
+            # 240px chosen empirically (see openspec/changes/fix-cable-list-
+            # overflow): with several real devices connected at once, the
+            # tallest port-category column measured 185px (MIDI devices
+            # without a short alias fall back to a long a2j port name that
+            # wraps to 3 lines). This constant is coupled to two other
+            # locations that must move with it: run_zynthian.sh's
+            # device_cables DISPLAY_HEIGHT (= V5_IMAGE_SIZE[1] + this
+            # margin) and run_zynthian_vnc.sh's XVFB_SIZE height.
+            self.cable_margin = 240 if self.style == "device_cables" else 0
             self.top_margin = self.cable_margin + V5_SCREEN_RECT[1]
             self.panel_width = V5_SCREEN_RECT[0]
             self.screen_width = V5_SCREEN_RECT[2]
@@ -437,9 +446,43 @@ class zynthian_gui_touchkeypad_v5(tkinter.Canvas):
                 texts.append((self._wrap_cable_text(raw, max_chip_chars), mcolor))
             row_heights = [len(lines) * line_h + 4 for lines, _ in texts]
             block_h = sum(row_heights) + (len(texts) - 1) * row_gap
-            y = (self.cable_margin - block_h) // 2
+            # Top-align (clamped, never negative) instead of pure centering
+            # when the block is taller than the margin - centering alone
+            # would push early rows above y=0, clipping them off-canvas
+            # (see openspec/changes/fix-cable-list-overflow). If even
+            # top-aligned it still doesn't fit, render as many rows as fit
+            # and summarize the rest as a single "+N more" chip rather than
+            # letting a row run past the margin and risk overlapping a
+            # neighbouring cable's labels.
+            top_inset = 2
+            more_chip_h = line_h + 4
+            avail = self.cable_margin - top_inset - 2
+            if block_h <= avail:
+                y = max(top_inset, (self.cable_margin - block_h) // 2)
+                fit_count = len(texts)
+            else:
+                y = top_inset
+                running = 0
+                fit_count = 0
+                for row_h in row_heights:
+                    if fit_count > 0 and running + row_h + more_chip_h > avail:
+                        break
+                    running += row_h + row_gap
+                    fit_count += 1
+                fit_count = max(1, min(fit_count, len(texts)))
             left_x = cx - 40
-            for (lines, mcolor), row_h in zip(texts, row_heights):
+            for i, ((lines, mcolor), row_h) in enumerate(zip(texts, row_heights)):
+                if i >= fit_count:
+                    remaining = len(texts) - fit_count
+                    more_text = f"+{remaining} more"
+                    text_w = font.measure(more_text) + 8
+                    rect_id = self.create_rectangle(left_x, y, left_x + text_w, y + more_chip_h,
+                                                     fill="#888888", outline="", tags="v5_connections")
+                    text_id = self.create_text(left_x + 4, y + more_chip_h // 2, text=more_text, anchor="w",
+                                                justify=tkinter.LEFT, fill="#000000", font=font,
+                                                tags="v5_connections")
+                    self.connection_slots.append((rect_id, text_id, None))
+                    break
                 text = "\n".join(lines)
                 text_w = max(font.measure(line) for line in lines) + 8
                 rect_id = self.create_rectangle(left_x, y, left_x + text_w, y + row_h,
