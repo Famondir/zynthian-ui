@@ -2808,7 +2808,11 @@ class zynthian_state_manager:
 
     def select_bluetooth_controller(self, controller):
         if controller.count(":") != 5:
-            logging.error(f"Bad controller address ({controller})!")
+            # An empty/unset controller address is the normal state on a
+            # fresh install with no Bluetooth controller ever configured
+            # (e.g. this desktop port's test environments) - not an
+            # actual error condition, so don't log it as one.
+            logging.warning(f"Bad controller address ({controller})!")
             return
         self.unblock_bluetooth_controllers()
         proc = Popen('bluetoothctl', stdin=PIPE, stdout=PIPE, stderr=PIPE, encoding='utf-8')
