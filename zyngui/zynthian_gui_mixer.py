@@ -1543,7 +1543,13 @@ class zynthian_gui_mixer(zynthian_gui_base):
         regardless of font size/DPI (the reserved space used to be a fixed
         multiple of a font-size constant that didn't always match the text's
         real rendered width - see fix-mixer-bpm-display-clipping)."""
-        right_margin = int(self.status_fs * 0.3)
+        # 1.3*status_fs matches zynthian_gui_base.py's own convention for
+        # reserving room for a single topbar status icon (see status_mute's
+        # positioning) - status_l is permanently occupied by status_error's
+        # icon (a CPU-load-colored update/heart glyph, always shown, not just
+        # on error - zynthian_gui_base.py's refresh_status()), so the tempo
+        # text's right edge must clear that, not just leave a small gap.
+        right_margin = int(self.status_fs * 1.3)
         item_gap = int(self.status_fs * 0.5)
         tempo_x = self.status_l - right_margin
         self.status_canvas.coords(self.status_tempo, tempo_x, 2)
