@@ -151,13 +151,6 @@ for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
     except:
         pass
 
-# Whether the onboard 3.5mm jack is currently jack-sensed as present
-# (support-onboard-jack-detection) - gates the onboard mic-in port's
-# availability, updated each update_hw_audio_ports() cycle. Defaults to
-# True (no gating) until the first real check, matching prior behaviour.
-onboard_mic_present = True
-
-
 def check_onboard_mic_present():
     """Poll the onboard codec's "Mic Jack" presence-detect control (numid=11
     on hw:sofhdadsp - excludes numid=13 "Speaker Phantom Jack", a
@@ -176,6 +169,15 @@ def check_onboard_mic_present():
         return "values=on" in result.stdout
     except Exception:
         return True
+
+
+# Whether the onboard 3.5mm jack is currently jack-sensed as present
+# (support-onboard-jack-detection) - gates the onboard mic-in port's
+# availability, updated each update_hw_audio_ports() cycle. Checked
+# synchronously here (like jack_audio_device above) rather than starting
+# with a hardcoded default, so a chain created before auto_connect_thread's
+# first poll cycle still sees the correct value, not a stale default.
+onboard_mic_present = check_onboard_mic_present()
 
 # ------------------------------------------------------------------------------
 
