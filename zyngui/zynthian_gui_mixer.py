@@ -1196,6 +1196,7 @@ class zynthian_gui_mixer(zynthian_gui_base):
         self.alt_mode = False
         self.launcher_mode = False
         self._touching_launchers = False
+        self._legend_font_size_cap = None  # set on first update_layout() call
 
         self.chan2strip = {} # Map of audio strips, indexed by [is_mixbus, mixer_channel]
         self.highlighted_strip = None  # Highligted mixer strip object
@@ -1347,6 +1348,18 @@ class zynthian_gui_mixer(zynthian_gui_base):
         self.toggle_color = "#D0D000"
         self.mono_color = "#B0B0B0"
         font_size = min(int(0.5 * self.legend_height), int(0.25 * self.width))
+        # Cap the strip legend ("Main"/"Mixer", the mixbus "Main" button,
+        # etc.) at whatever size it first computed to - normally the
+        # keypad-shown view's size, since that's the state the app starts in.
+        # Without this, toggling to the much taller keypad-hidden view (see
+        # fix-topbar-resize-on-keypad-toggle) grows this font far past
+        # comfortable reading size (e.g. 17px -> 44px), since it's sized
+        # purely off self.height/self.width with no upper bound - found live
+        # during that change's own verification.
+        if self._legend_font_size_cap is None:
+            self._legend_font_size_cap = font_size
+        else:
+            font_size = min(font_size, self._legend_font_size_cap)
         self.font = (zynthian_gui_config.font_family, font_size)
         self.font_fader = (zynthian_gui_config.font_family, int(0.9 * font_size))
         self.font_clip_state = (zynthian_gui_config.font_family, int(0.6 * font_size))
