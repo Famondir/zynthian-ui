@@ -815,9 +815,34 @@ if "zynthian_main.py" in sys.argv[0]:
         root_frame.configure(width=screen_width, height=screen_height)
         root_frame.place(x=main_x, y=main_y)
         root_frame.lift()
+        # Recompute topbar sizing for the new screen_width/screen_height -
+        # not just once at module load (see fix-topbar-resize-on-keypad-toggle:
+        # every open screen's own topbar/status geometry is refreshed in turn
+        # via the <Configure> event this root_frame resize triggers, which
+        # zynthian_gui_base.update_layout() reads these updated globals from).
+        update_topbar_vars()
 
     def toggle_touch_keypad():
         set_touch_keypad(not touch_shown)
+
+    def update_topbar_vars():
+        """(Re)compute topbar_height/topbar_fs/font_listbox/font_topbar from
+        the current screen_width/screen_height/font_size. Callable again
+        whenever set_touch_keypad() changes screen_width/screen_height at
+        runtime, not just once at module load - see
+        fix-topbar-resize-on-keypad-toggle. font_size itself is NOT
+        recomputed here (stays display_width-based, needed early/as-is by
+        the touch keypad's own button-label sizing - see
+        fix-mixer-bpm-display-clipping's design.md)."""
+        global topbar_height, topbar_fs, font_listbox, font_topbar
+        if screen_width >= 800:
+            topbar_height = screen_height // 12
+            topbar_fs = int(1.5 * font_size)
+        else:
+            topbar_height = screen_height // 10
+            topbar_fs = int(1.1 * font_size)
+        font_listbox = (font_family, int(1.0 * font_size))
+        font_topbar = (font_family, topbar_fs)
 
     #---------------------------------------------------------------------------
     # Root Frame Management
@@ -930,26 +955,19 @@ if "zynthian_main.py" in sys.argv[0]:
             touch_shown = 0
             touch_keypad = None
 
-        # Topbar variables
-        # (computed from screen_width/screen_height here, after set_touch_keypad()
-        # above has corrected them to the mocked screen's own size - not from
-        # font_size/display_width, which stay tied to the outer display for the
-        # touch keypad's own button-label sizing. On real hardware screen_width/
-        # screen_height already equal display_width/display_height, so this is a
-        # no-op there; see fix-mixer-bpm-display-clipping for the bug this fixes:
-        # topbar_height used to be computed before set_touch_keypad() ran, from
-        # the outer display's dimensions, oversizing the topbar status text -
-        # e.g. tempo/BPM - relative to the room reserved for it.)
-        if screen_width >= 800:
-            topbar_height = screen_height // 12
-            topbar_fs = int(1.5*font_size)
-        else:
-            topbar_height = screen_height // 10
-            topbar_fs = int(1.1*font_size)
-
-        # Global fonts
-        font_listbox = (font_family, int(1.0*font_size))
-        font_topbar = (font_family, topbar_fs)
+        # Topbar variables (computed from screen_width/screen_height, after
+        # set_touch_keypad() above has corrected them to the mocked screen's
+        # own size - not from font_size/display_width, which stay tied to the
+        # outer display for the touch keypad's own button-label sizing. On
+        # real hardware screen_width/screen_height already equal
+        # display_width/display_height, so this is a no-op there; see
+        # fix-mixer-bpm-display-clipping for the startup-time bug this fixes,
+        # and fix-topbar-resize-on-keypad-toggle for why this is a callable
+        # function rather than inline code - set_touch_keypad() above already
+        # called it when touch_navigation is truthy, but the else branch
+        # never calls set_touch_keypad() at all, so call it unconditionally
+        # here too (cheap, idempotent) to cover that case.)
+        update_topbar_vars()
 
         # ------------------------------------------------------------------------------
         # Loading Logo Animation

@@ -202,6 +202,11 @@ class zynthian_gui_base(tkinter.Frame):
     # Function to update display, e.g. after geometry changes
     # Override if required
     def update_layout(self):
+        # Must run before the width/height calc below reads self.topbar_height -
+        # a keypad-view toggle can change it (e.g. 40 <-> 100), and everything
+        # else this recomputes (status_l/status_fs/...) - see
+        # fix-topbar-resize-on-keypad-toggle.
+        self.refresh_topbar_layout()
         if self.parent:
             self.width = self.winfo_width()
             self.height = self.winfo_height() - self.topbar_height
@@ -209,7 +214,6 @@ class zynthian_gui_base(tkinter.Frame):
             self.width = zynthian_gui_config.screen_width
             self.height = zynthian_gui_config.screen_height - self.topbar_height
         #logging.debug(f"[{self.__class__.__module__}] => WIDTH={self.width}, HEIGHT={self.height}")
-        # TODO Resize topbar elements
 
     # Draw screen ready to display (like double buffer) - Override in subclass
     def build_view(self):
@@ -344,6 +348,65 @@ class zynthian_gui_base(tkinter.Frame):
         height = int(self.status_h / 4 - 2)
         self.dpm_a = zynthian_gui_dpm(self.status_canvas, 0, 0, width, height, False, ("status_dpm"), True)
         self.dpm_b = zynthian_gui_dpm(self.status_canvas, 0, height + 2, width, height, False, ("status_dpm"), True)
+
+    def refresh_topbar_layout(self):
+        """Recompute topbar/status geometry and fonts from the current
+        zynthian_gui_config values and reconfigure/reposition every existing
+        topbar widget/canvas item to match - the touch-keypad-toggle
+        counterpart to __init__'s one-time setup above. Without this, toggling
+        the keypad view at runtime resizes self.width/self.height (and
+        anything screens compute from those) but leaves the topbar/status
+        text and icons frozen at their startup size - see
+        fix-topbar-resize-on-keypad-toggle."""
+        if not self.topbar_allowed:
+            return
+
+        self.topbar_width = zynthian_gui_config.screen_width
+        self.topbar_height = zynthian_gui_config.topbar_height
+        self.status_l = int(self.topbar_width * 0.27)
+        self.status_h = self.topbar_height
+        self.status_rh = max(2, int(self.status_h / 4))
+        self.status_fs = int(0.36 * self.status_h)
+        self.status_lpad = self.status_fs
+        self.title_canvas_width = self.topbar_width - self.status_l - self.status_lpad - 2
+
+        self.tb_frame.configure(width=self.topbar_width, height=self.topbar_height)
+        self.title_canvas.configure(height=self.topbar_height)
+        self.label_select_path.configure(font=zynthian_gui_config.font_topbar)
+        self.select_path_font.configure(family=zynthian_gui_config.font_topbar[0],
+                                         size=zynthian_gui_config.font_topbar[1])
+        self.status_canvas.configure(width=self.status_l + 2, height=self.status_h)
+        self.status_canvas.grid_configure(padx=(self.status_lpad, 0))
+
+        status_font = ("forkawesome", self.status_fs)
+        self.status_canvas.itemconfig(self.status_mute, font=status_font)
+        self.status_canvas.coords(self.status_mute, int(self.status_l - self.status_fs * 1.3), 0)
+        self.status_canvas.itemconfig(self.status_error, font=status_font)
+        self.status_canvas.coords(self.status_error, self.status_l, 0)
+        self.status_canvas.itemconfig(self.status_audio_rec, font=status_font)
+        self.status_canvas.coords(self.status_audio_rec, 0, self.status_h - 2)
+        self.status_canvas.itemconfig(self.status_audio_play, font=status_font)
+        self.status_canvas.coords(self.status_audio_play, int(self.status_fs * 1.3), self.status_h - 2)
+        self.status_canvas.itemconfig(self.status_midi_rec, font=status_font)
+        self.status_canvas.coords(self.status_midi_rec, int(self.status_fs * 2.6), self.status_h - 2)
+        self.status_canvas.itemconfig(self.status_midi_play, font=status_font)
+        self.status_canvas.coords(self.status_midi_play, int(self.status_fs * 3.9), self.status_h - 2)
+        self.status_canvas.itemconfig(self.status_seq_rec, font=status_font)
+        self.status_canvas.coords(self.status_seq_rec, int(self.status_fs * 5.2), self.status_h - 2)
+        self.status_canvas.itemconfig(self.status_seq_play, font=status_font)
+        self.status_canvas.coords(self.status_seq_play, int(self.status_fs * 6.5), self.status_h - 2)
+        self.status_canvas.itemconfig(self.status_midi, font=status_font)
+        self.status_canvas.coords(self.status_midi, self.status_l, self.status_h - 2)
+        self.status_canvas.coords(
+            self.status_midi_clock,
+            int(self.status_l - self.status_fs * 1.3), int(self.status_h * 0.9),
+            int(self.status_l), int(self.status_h * 0.9))
+
+        # Simplest correct way to resize the DPM meter itself - it's a small
+        # custom widget (zynthian_gui_dpm), not a plain canvas item; recreate
+        # rather than reach into its internals.
+        self.status_canvas.delete("status_dpm")
+        self.init_dpmeter()
 
     # -------------------------------------------------------------------------
     # Refresh & Update methods

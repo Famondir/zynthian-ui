@@ -1284,6 +1284,19 @@ class zynthian_gui_mixer(zynthian_gui_base):
         self.state_changed = True
         super().update_layout()
 
+        # super().update_layout() (via refresh_topbar_layout()) may have just
+        # changed self.status_h/self.status_fs (e.g. a keypad-view toggle) -
+        # the tempo/time-signature font and layout are mixer-specific state on
+        # top of that, not covered by the base class, so refresh them too.
+        # See fix-topbar-resize-on-keypad-toggle.
+        new_tempo_font_size = int(0.25 * self.status_h)
+        if self.status_tempo_font_obj.actual("size") != new_tempo_font_size:
+            self.status_tempo_font_obj.configure(size=new_tempo_font_size)
+            self.status_tempo_font = ("forkawesome", new_tempo_font_size)
+            self.status_canvas.itemconfig(self.status_tempo, font=self.status_tempo_font)
+            self.status_canvas.itemconfig(self.status_timesig, font=self.status_tempo_font)
+        self.layout_status_tempo()
+
         # Update geometry
         if zynthian_gui_config.visible_mixer_strips < 1:
             # Automatic sizing if not defined in config
@@ -1567,8 +1580,8 @@ class zynthian_gui_mixer(zynthian_gui_base):
         # since it's the real Tk font measurement, not a reimplementation.
         timesig_left_edge = timesig_x - timesig_width
         logging.info(
-            "layout_status_tempo: status_l=%d timesig_left_edge=%d fits=%s",
-            self.status_l, timesig_left_edge, timesig_left_edge >= 0)
+            "layout_status_tempo: status_l=%d status_fs=%d timesig_left_edge=%d fits=%s",
+            self.status_l, self.status_fs, timesig_left_edge, timesig_left_edge >= 0)
 
     def set_tempo(self, tempo=None):
         if tempo is None:
