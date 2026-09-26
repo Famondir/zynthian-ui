@@ -27,6 +27,7 @@
 
 import copy
 import tkinter
+import tkinter.font as tkFont
 import logging
 #import traceback
 from time import sleep
@@ -1204,21 +1205,27 @@ class zynthian_gui_mixer(zynthian_gui_base):
         # List of (strip,control) requiring gui refresh (control=None for whole strip refresh)
         self.pending_refresh_queue = set()
 
+        self.status_tempo_font = ("forkawesome", int(0.25 * self.status_h))
+        self.status_tempo_font_obj = tkFont.Font(root=self.status_canvas, family=self.status_tempo_font[0],
+                                                  size=self.status_tempo_font[1])
+
         self.status_tempo = self.status_canvas.create_text(
-            int(self.status_l - self.status_fs * 3.5), 2,
+            int(self.status_l), 2,
             anchor=tkinter.NE,
             fill=zynthian_gui_config.color_header_tx,
-            font=("forkawesome", int(0.25 * self.status_h)),
+            font=self.status_tempo_font,
             text="120.0 bpm",
             state=tkinter.NORMAL)
 
         self.status_timesig = self.status_canvas.create_text(
-            int(self.status_l - self.status_fs * 8.5), 2,
+            int(self.status_l), 2,
             anchor=tkinter.NE,
             fill=zynthian_gui_config.color_header_tx,
-            font=("forkawesome", int(0.25 * self.status_h)),
+            font=self.status_tempo_font,
             text="1 | 4/4",
             state=tkinter.NORMAL)
+
+        self.layout_status_tempo()
 
         self.left_canvas.bind("<Button-1>", self.on_press)
         self.left_canvas.bind("<B1-Motion>", self.on_motion)
@@ -1530,12 +1537,38 @@ class zynthian_gui_mixer(zynthian_gui_base):
             zynsigman.unregister(zynsigman.S_STEPSEQ, zynsigman.SS_SEQ_STATE, self.refresh_launchers)
             super().hide()
 
+    def layout_status_tempo(self):
+        """Reposition the tempo/time-signature status texts from their actual
+        measured width, so they never overflow the status canvas's left edge
+        regardless of font size/DPI (the reserved space used to be a fixed
+        multiple of a font-size constant that didn't always match the text's
+        real rendered width - see fix-mixer-bpm-display-clipping)."""
+        right_margin = int(self.status_fs * 0.3)
+        item_gap = int(self.status_fs * 0.5)
+        tempo_x = self.status_l - right_margin
+        self.status_canvas.coords(self.status_tempo, tempo_x, 2)
+        tempo_width = self.status_tempo_font_obj.measure(
+            self.status_canvas.itemcget(self.status_tempo, "text"))
+        timesig_width = self.status_tempo_font_obj.measure(
+            self.status_canvas.itemcget(self.status_timesig, "text"))
+        timesig_x = tempo_x - tempo_width - item_gap
+        self.status_canvas.coords(self.status_timesig, timesig_x, 2)
+        # Ground-truth log line for workflow_testing's regression check
+        # (workflow_testing/check_topbar_status_fit.py) - reads this instead
+        # of re-deriving the geometry formula or pixel-scanning a screenshot,
+        # since it's the real Tk font measurement, not a reimplementation.
+        timesig_left_edge = timesig_x - timesig_width
+        logging.info(
+            "layout_status_tempo: status_l=%d timesig_left_edge=%d fits=%s",
+            self.status_l, timesig_left_edge, timesig_left_edge >= 0)
+
     def set_tempo(self, tempo=None):
         if tempo is None:
             self.status_canvas.itemconfig(self.status_tempo, text=f"{self.zynseq.get_tempo():.1f} bpm")
         else:
             self.status_canvas.itemconfig(self.status_tempo, fill=zynthian_gui_config.color_ml, text=f"{tempo:.1f} bpm")
             Timer(0.6, self.clear_tempo_highlight).start()
+        self.layout_status_tempo()
 
     def clear_tempo_highlight(self):
         self.status_canvas.itemconfig(self.status_tempo, fill=zynthian_gui_config.color_header_tx)
@@ -1544,6 +1577,7 @@ class zynthian_gui_mixer(zynthian_gui_base):
         self.bpb = bpb
         self.status_canvas.itemconfig(self.status_timesig, fill=zynthian_gui_config.color_ml, text=f"{self.beat} | {bpb}/4")
         Timer(0.6, self.clear_timesig_highlight).start()
+        self.layout_status_tempo()
 
     def clear_timesig_highlight(self):
         self.status_canvas.itemconfig(self.status_timesig, fill=zynthian_gui_config.color_header_tx)
@@ -1569,6 +1603,7 @@ class zynthian_gui_mixer(zynthian_gui_base):
             if self.beat != self.zynseq.beat:
                 self.beat = self.zynseq.beat
                 self.status_canvas.itemconfig(self.status_timesig, text=f"{self.beat} | {self.bpb}/4")
+                self.layout_status_tempo()
             for strip in self.chain_strips:
                 # Update MIDI activity indicators
                 if strip.chain.midi_chan is not None:

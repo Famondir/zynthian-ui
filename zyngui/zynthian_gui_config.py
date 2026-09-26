@@ -883,21 +883,13 @@ if "zynthian_main.py" in sys.argv[0]:
         screen_height = display_height
 
         # Global font size
+        # (kept on display_width/display_height, not screen_width/screen_height:
+        # the touch keypad's own button-label sizing, set up below, reads this
+        # before screen_width/screen_height get corrected to the mocked screen's
+        # own size by set_touch_keypad() - see zynthian_gui_touchkeypad_v5.py)
         font_size = get_env_int('ZYNTHIAN_UI_FONT_SIZE', 16)
         if not font_size:
             font_size = int(display_width / 40)
-
-        # Topbar variables
-        if screen_width >= 800:
-            topbar_height = screen_height // 12
-            topbar_fs = int(1.5*font_size)
-        else:
-            topbar_height = screen_height // 10
-            topbar_fs = int(1.1*font_size)
-
-        # Global fonts
-        font_listbox = (font_family, int(1.0*font_size))
-        font_topbar = (font_family, topbar_fs)
 
         # ------------------------------------------------------------------------------
         # Setup Root Frame for the GUI
@@ -937,6 +929,27 @@ if "zynthian_main.py" in sys.argv[0]:
         else:
             touch_shown = 0
             touch_keypad = None
+
+        # Topbar variables
+        # (computed from screen_width/screen_height here, after set_touch_keypad()
+        # above has corrected them to the mocked screen's own size - not from
+        # font_size/display_width, which stay tied to the outer display for the
+        # touch keypad's own button-label sizing. On real hardware screen_width/
+        # screen_height already equal display_width/display_height, so this is a
+        # no-op there; see fix-mixer-bpm-display-clipping for the bug this fixes:
+        # topbar_height used to be computed before set_touch_keypad() ran, from
+        # the outer display's dimensions, oversizing the topbar status text -
+        # e.g. tempo/BPM - relative to the room reserved for it.)
+        if screen_width >= 800:
+            topbar_height = screen_height // 12
+            topbar_fs = int(1.5*font_size)
+        else:
+            topbar_height = screen_height // 10
+            topbar_fs = int(1.1*font_size)
+
+        # Global fonts
+        font_listbox = (font_family, int(1.0*font_size))
+        font_topbar = (font_family, topbar_fs)
 
         # ------------------------------------------------------------------------------
         # Loading Logo Animation
