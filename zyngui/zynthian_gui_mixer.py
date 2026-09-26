@@ -1548,8 +1548,10 @@ class zynthian_gui_mixer(zynthian_gui_base):
         # positioning) - status_l is permanently occupied by status_error's
         # icon (a CPU-load-colored update/heart glyph, always shown, not just
         # on error - zynthian_gui_base.py's refresh_status()), so the tempo
-        # text's right edge must clear that, not just leave a small gap.
-        right_margin = int(self.status_fs * 1.3)
+        # text's right edge must clear that, not just leave a small gap. The
+        # extra measured "0"-width on top is user-requested breathing room
+        # (one letter's width) beyond the minimum needed to avoid overlap.
+        right_margin = int(self.status_fs * 1.3) + self.status_tempo_font_obj.measure("0")
         item_gap = int(self.status_fs * 0.5)
         tempo_x = self.status_l - right_margin
         self.status_canvas.coords(self.status_tempo, tempo_x, 2)
