@@ -1196,7 +1196,7 @@ class zynthian_gui_mixer(zynthian_gui_base):
         self.alt_mode = False
         self.launcher_mode = False
         self._touching_launchers = False
-        self._legend_font_size_cap = None  # set on first update_layout() call
+        self._legend_font_size_baseline = None  # set on first update_layout() call
 
         self.chan2strip = {} # Map of audio strips, indexed by [is_mixbus, mixer_channel]
         self.highlighted_strip = None  # Highligted mixer strip object
@@ -1348,18 +1348,24 @@ class zynthian_gui_mixer(zynthian_gui_base):
         self.toggle_color = "#D0D000"
         self.mono_color = "#B0B0B0"
         font_size = min(int(0.5 * self.legend_height), int(0.25 * self.width))
-        # Cap the strip legend ("Main"/"Mixer", the mixbus "Main" button,
-        # etc.) at whatever size it first computed to - normally the
-        # keypad-shown view's size, since that's the state the app starts in.
-        # Without this, toggling to the much taller keypad-hidden view (see
-        # fix-topbar-resize-on-keypad-toggle) grows this font far past
-        # comfortable reading size (e.g. 17px -> 44px), since it's sized
-        # purely off self.height/self.width with no upper bound - found live
-        # during that change's own verification.
-        if self._legend_font_size_cap is None:
-            self._legend_font_size_cap = font_size
-        else:
-            font_size = min(font_size, self._legend_font_size_cap)
+        # Damp the strip legend's ("Main"/"Mixer", the mixbus "Main" button,
+        # etc.) growth relative to whatever size it first computed to -
+        # normally the keypad-shown view's size, since that's the state the
+        # app starts in. Without this, toggling to the much taller keypad-
+        # hidden view (see fix-topbar-resize-on-keypad-toggle) grows this
+        # font far past comfortable reading size (e.g. 17px -> 44px), since
+        # it's sized purely off self.height/self.width with no upper bound -
+        # found live during that change's own verification. A hard cap (no
+        # growth at all) was tried first but looked wrong on its own -
+        # user feedback: still scale, just far less aggressively - so only
+        # LEGEND_GROWTH_DAMPING of the size increase beyond the baseline is
+        # kept (e.g. 0.4 => a jump that would have been +27px becomes +11px).
+        LEGEND_GROWTH_DAMPING = 0.4
+        if self._legend_font_size_baseline is None:
+            self._legend_font_size_baseline = font_size
+        elif font_size > self._legend_font_size_baseline:
+            growth = font_size - self._legend_font_size_baseline
+            font_size = int(self._legend_font_size_baseline + growth * LEGEND_GROWTH_DAMPING)
         self.font = (zynthian_gui_config.font_family, font_size)
         self.font_fader = (zynthian_gui_config.font_family, int(0.9 * font_size))
         self.font_clip_state = (zynthian_gui_config.font_family, int(0.6 * font_size))
