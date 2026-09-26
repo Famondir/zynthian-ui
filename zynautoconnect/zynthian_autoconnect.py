@@ -31,6 +31,7 @@ import psutil
 import pexpect
 import logging
 import alsaaudio
+import subprocess
 import traceback
 from time import sleep
 from threading import Thread, Lock
@@ -149,6 +150,32 @@ for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                     break
     except:
         pass
+
+# Whether the onboard 3.5mm jack is currently jack-sensed as present
+# (support-onboard-jack-detection) - gates the onboard mic-in port's
+# availability, updated each update_hw_audio_ports() cycle. Defaults to
+# True (no gating) until the first real check, matching prior behaviour.
+onboard_mic_present = True
+
+
+def check_onboard_mic_present():
+    """Poll the onboard codec's "Mic Jack" presence-detect control (numid=11
+    on hw:sofhdadsp - excludes numid=13 "Speaker Phantom Jack", a
+    permanently-on false signal with no real sense pin).
+
+    Returns True (no gating) if the control doesn't exist - e.g. real
+    Zynthian hardware or Docker, neither of which have this laptop's
+    onboard codec - so this is a no-op there.
+    """
+    try:
+        result = subprocess.run(
+            ["amixer", "-c", "sofhdadsp", "cget", "numid=11"],
+            capture_output=True, text=True, timeout=1)
+        if result.returncode != 0:
+            return True
+        return "values=on" in result.stdout
+    except Exception:
+        return True
 
 # ------------------------------------------------------------------------------
 
@@ -1223,9 +1250,21 @@ def get_hw_audio_dst_ports():
 
 
 def update_hw_audio_ports():
-    global alsa_audio_srcs, alsa_audio_dests
+    global alsa_audio_srcs, alsa_audio_dests, onboard_mic_present
 
     dirty = False
+
+    # support-onboard-jack-detection: same ~2s cycle as the hotplug checks
+    # below - a presence change is treated like any other hotplug change
+    # (triggers the same "rebuild all chains' audio graph" tail of this
+    # function), so an already-routed chain gets actively disconnected via
+    # audio_autoconnect()'s existing stale-route reconciliation, not just
+    # left silently connected.
+    mic_present = check_onboard_mic_present()
+    if mic_present != onboard_mic_present:
+        onboard_mic_present = mic_present
+        dirty = True
+
     if zynthian_gui_config.hotplug_audio_enabled:
         # Add new devices
         for device in get_alsa_audio_devices(True, "hotplug"):
@@ -1418,6 +1457,15 @@ def get_audio_capture_ports():
     ports = jclient.get_ports("system", is_output=True, is_audio=True, is_physical=True)
     if jack_audio_device == "Dummy":
         # Remove first two ports
+        for port in list(ports):
+            if port.name in ["system:capture_1", "system:capture_2"]:
+                ports.remove(port)
+    if jack_audio_device == "sofhdadsp" and not onboard_mic_present:
+        # support-onboard-jack-detection: don't offer/auto-route to the
+        # onboard mic-in port while nothing is jack-sensed as plugged in -
+        # these are jackd's own permanent hardware ports (never destroyed
+        # the way a USB device's bridged ports are), so filtering them out
+        # of this list is the only place gating can happen.
         for port in list(ports):
             if port.name in ["system:capture_1", "system:capture_2"]:
                 ports.remove(port)

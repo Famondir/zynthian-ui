@@ -101,7 +101,13 @@ class zynthian_chain:
             if self.zynmixer_proc and self.zynmixer_proc.eng_code == "MR":
                 self.audio_in = [] # We don't want any direct audio input connections to buses
             elif self.audio_thru:
-                self.audio_in = [1, 2] # Default is to route first 2 audio inputs to audio chains
+                if zynautoconnect.onboard_mic_present:
+                    self.audio_in = [1, 2] # Default is to route first 2 audio inputs to audio chains
+                else:
+                    # support-onboard-jack-detection: the onboard mic isn't
+                    # jack-sensed as plugged in - don't default a new chain
+                    # to a floating, unplugged input.
+                    self.audio_in = []
             self.audio_out = [0]
 
         if self.is_midi():
