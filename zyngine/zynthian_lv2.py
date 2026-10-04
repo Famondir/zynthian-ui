@@ -199,6 +199,33 @@ engines = None
 engines_by_type = None
 engines_mtime = None
 
+# Debian/Ubuntu packages providing LV2 plugin families, by URI prefix.
+# Used as install hint for upstream plugins that are not installed.
+lv2_package_hints = {
+    "urn:dragonfly:": "dragonfly-reverb-lv2",
+    "https://github.com/michaelwillis/dragonfly-reverb": "dragonfly-reverb-lv2",
+    "http://calf.sourceforge.net/plugins/": "calf-plugins",
+    "urn:zamaudio:": "zam-plugins",
+    "http://drobilla.net/plugins/mda/": "mda-lv2",
+    "http://plugin.org.uk/swh-plugins/": "swh-lv2",
+    "http://lsp-plug.in/plugins/lv2/": "lsp-plugins-lv2",
+    "http://gareus.org/oss/lv2/avldrums": "avldrums.lv2",
+    "http://gareus.org/oss/lv2/": "x42-plugins",
+}
+
+
+def get_install_hint(uri, installed=()):
+    """Get the package that probably provides a not-installed plugin.
+    No hint if a plugin of that family is installed already: the package is
+    there, so this plugin comes from somewhere else (e.g. a newer version).
+    """
+    for prefix, package in lv2_package_hints.items():
+        if uri.startswith(prefix):
+            if any(iuri.startswith(prefix) for iuri in installed):
+                return None
+            return package
+    return None
+
 # ------------------------------------------------------------------------------
 # Lilv LV2 library initialization
 # ------------------------------------------------------------------------------
@@ -266,8 +293,39 @@ def load_engines():
             logging.debug(f"Removing {key} from engine list.")
             engines.pop(key, None)
 
+    mark_unavailable_engines()
     get_engines_by_type()
     return engines
+
+
+def mark_unavailable_engines():
+    """Flag LV2 engines whose plugin can't be found by lilv (AVAILABLE=False), and
+    add upstream default engines that are enabled there but not installed here,
+    so the GUI can show them greyed out as install hint. Those added entries
+    (UPSTREAM_ONLY=True) live only in memory and are never saved.
+    """
+    installed = {str(plugin.get_uri()) for plugin in world.get_all_plugins()}
+    for key, info in engines.items():
+        if key.startswith("JV/"):
+            info['AVAILABLE'] = info.get('URL') in installed
+            if not info['AVAILABLE']:
+                info['INSTALL_HINT'] = get_install_hint(info.get('URL', ""), installed)
+
+    try:
+        with open(ENGINE_DEFAULT_CONFIG_FILE) as f:
+            default_engines = json.load(f)
+    except Exception as e:
+        logging.debug(f"Can't load default engine config => {e}")
+        return
+    for key, info in default_engines.items():
+        if key.startswith("JV/") and key not in engines and info.get('ENABLED') and info.get('URL') not in installed:
+            if rbpi_version_number < 5 and info.get('URL') in rpi5_plugins:
+                continue
+            info['AVAILABLE'] = False
+            info['INSTALL_HINT'] = get_install_hint(info['URL'], installed)
+            info['UPSTREAM_ONLY'] = True
+            info['EDIT'] = 0
+            engines[key] = info
 
 
 def sanitize_engines():
@@ -281,12 +339,15 @@ def save_engines():
     global engines_mtime
 
     # Make a deep copy and remove not serializable objects (ENGINE)
+    # and runtime-only availability info (see mark_unavailable_engines)
     sengines = copy.deepcopy(engines)
-    for key, info in sengines.items():
-        try:
-            del info['ENGINE']
-        except:
-            pass
+    for key in list(sengines.keys()):
+        info = sengines[key]
+        if info.get('UPSTREAM_ONLY'):
+            del sengines[key]
+            continue
+        for field in ('ENGINE', 'AVAILABLE', 'INSTALL_HINT'):
+            info.pop(field, None)
     # Save to file
     try:
         with open(ENGINE_CONFIG_FILE, 'w') as f:
@@ -631,6 +692,7 @@ def generate_engines_config_file(refresh=True, reset_rankings=None):
         engines_mtime = os.stat(ENGINE_CONFIG_FILE).st_mtime
     except Exception as e:
         logging.error(f"Can't save engines DB => {e}")
+    mark_unavailable_engines()
 
     dt = int(round(time.time())) - start
     logging.debug('Generating engine config file took {}s'.format(dt))
@@ -1309,7 +1371,7 @@ if __name__ == '__main__':
             update_engine_defaults(refresh=False)
             # Detect new LV2 plugins and generate presets cache for them
             for key, info in engines.items():
-                if key not in prev_engines and 'URL' in info and info['URL']:
+                if key not in prev_engines and 'URL' in info and info['URL'] and info.get('AVAILABLE', True):
                     generate_plugin_presets_cache(info['URL'], False)
 
         elif sys.argv[1] == "presets":
@@ -1339,7 +1401,7 @@ if __name__ == '__main__':
                 test_lv2_plugin(info)
             else:
                 for key, info in engines.items():
-                    if 'URL' in info and info['URL']:
+                    if 'URL' in info and info['URL'] and info.get('AVAILABLE', True):
                         test_lv2_plugin(info)
 
     else:

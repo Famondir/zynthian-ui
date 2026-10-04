@@ -1071,6 +1071,9 @@ class zynthian_chain_manager:
             if eng_code != 'None':
                 logging.error(f"Engine '{eng_code}' not found!")
             return None
+        if not self.engine_info[eng_code].get("AVAILABLE", True):
+            logging.error(f"Engine '{eng_code}' is not installed!")
+            return None
         if proc_id is None:
             proc_id = self.get_available_processor_id()
             send_signal = True
@@ -1097,10 +1100,20 @@ class zynthian_chain_manager:
                 self.remove_processor(chain_id, chain.synth_slots[0][0])   # Cannot have multiple synth engines
             chain.insert_processor(processor, slot)
 
-        engine = self.start_engine(processor, eng_code, eng_config)
+        try:
+            engine = self.start_engine(processor, eng_code, eng_config)
+        except Exception as e:
+            # e.g. jalv engine raising KeyError("Plugin not found") for a stale catalog entry
+            logging.error(f"Can't start engine '{eng_code}' => {e}")
+            engine = None
         if not engine:
-            # Failed!! => Remove processor from list
+            # Failed!! => Remove processor from list and from chain, so no engine-less slot is left behind
             del self.processors[proc_id]
+            if chain_id is not None:
+                try:
+                    chain.remove_processor(processor)
+                except Exception as e:
+                    logging.error(f"Can't remove failed processor from chain {chain_id} => {e}")
             self.state_manager.end_busy("add_processor")
             return None
 

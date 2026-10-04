@@ -532,6 +532,7 @@ color_alt = os.environ.get('ZYNTHIAN_UI_COLOR_ALT', "#ff00ff")
 color_alt2 = os.environ.get('ZYNTHIAN_UI_COLOR_ALT2', "#ff9000")
 color_error = os.environ.get('ZYNTHIAN_UI_COLOR_ERROR', "#ff0000")
 color_warn = os.environ.get('ZYNTHIAN_UI_COLOR_WARN', "#ff9000")
+color_unavailable = os.environ.get('ZYNTHIAN_UI_COLOR_UNAVAILABLE', "#8a929d")
 
 # Color Scheme
 color_panel_bd = color_bg

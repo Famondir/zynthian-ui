@@ -221,13 +221,25 @@ class zynthian_gui_engine(zynthian_gui_selector):
             #logging.warning(f"Can't get info for engine '{eng_code}'")
             return {"QUALITY": 0, "COMPLEX": 0, "DESCR": ""}
 
+    def is_available(self, eng_code):
+        """False for LV2 engines whose plugin is not installed (see zynthian_lv2.mark_unavailable_engines)"""
+        return self.get_info(eng_code).get("AVAILABLE", True)
+
+    def get_unavailable_text(self, eng_info):
+        if eng_info.get("INSTALL_HINT"):
+            return f"Not installed (apt package: {eng_info['INSTALL_HINT']})"
+        return "Not installed"
+
     def update_info(self):
         eng_info = self.get_info()
         quality_stars = "★" * eng_info["QUALITY"]
         self.info_canvas.itemconfigure(self.quality_stars_label, text=quality_stars)
         complexity_stars = "⚙️" * eng_info["COMPLEX"]
         self.info_canvas.itemconfigure(self.complexity_stars_label, text=complexity_stars)
-        self.info_canvas.itemconfigure(self.description_label, text=eng_info["DESCR"])
+        description = eng_info["DESCR"]
+        if not eng_info.get("AVAILABLE", True):
+            description = f"{self.get_unavailable_text(eng_info)}\n\n{description}"
+        self.info_canvas.itemconfigure(self.description_label, text=description)
 
     def show_details(self, eng_code=None):
         eng_info = self.get_info(eng_code)
@@ -306,7 +318,8 @@ class zynthian_gui_engine(zynthian_gui_selector):
             # Fill engine list
             cat = self.engine_cats[self.cat_index]
             engines_info = self.engines_by_cat[cat]
-            for eng in engines_info:
+            # Not installed engines go after the installed ones (stable sort keeps catalog order)
+            for eng in sorted(engines_info, key=lambda eng: not engines_info[eng].get("AVAILABLE", True)):
                 i = len(self.list_data)
                 info = engines_info[eng]
                 if self.show_all:
@@ -328,6 +341,12 @@ class zynthian_gui_engine(zynthian_gui_selector):
 
         super().fill_list()
 
+    def fill_listbox(self):
+        super().fill_listbox()
+        for i, item in enumerate(self.list_data):
+            if item[0] and not self.is_available(item[0]):
+                self.listbox.itemconfig(i, {'fg': zynthian_gui_config.color_unavailable})
+
     def select(self, index=None, set_zctrl=True):
         super().select(index, set_zctrl)
         self.update_info()
@@ -337,6 +356,9 @@ class zynthian_gui_engine(zynthian_gui_selector):
         if t == 'S':
             if i is not None and self.list_data[i][0]:
                 engine = self.list_data[i][0]
+                if not self.is_available(engine):
+                    self.zyngui.show_info(self.get_unavailable_text(self.get_info(engine)), 2000)
+                    return
                 if self.show_all:
                     info = self.chain_manager.engine_info[engine]
                     info['ENABLED'] = not info['ENABLED']
