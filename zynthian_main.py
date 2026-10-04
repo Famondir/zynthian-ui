@@ -135,6 +135,14 @@ def cb_keybinding(event):
     if event.keycode == 23:
         zynthian_gui_config.top.focus_set()
 
+    # Type into the on-screen keyboard dialog instead of triggering keybindings,
+    # except Ctrl/Alt combinations, which are never text.
+    keyboard_screen = zyngui.screens.get("keyboard")
+    if zyngui.current_screen == "keyboard" and keyboard_screen and keyboard_screen.shown \
+            and not event.state & (4 | 8):
+        keyboard_screen.physical_key(event)
+        return
+
     cuia = zynthian_gui_keybinding.get_key_action(event.keycode, event.state)
     if cuia is not None:
         # Emulate Zynswitch Push/Release with KeyPress/KeyRelease

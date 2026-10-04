@@ -836,6 +836,8 @@ class zynthian_gui:
         self.screens['keyboard'].set_mode(OSK_QWERTY)
         self.screen_lock.acquire()
         self.screens['keyboard'].show(callback, text, max_chars)
+        if self.current_screen != 'keyboard':
+            logging.info("SHOW SCREEN 'keyboard'")
         self.current_screen = 'keyboard'
         self.hide_screens(exclude='keyboard')
         self.screen_lock.release()
@@ -844,6 +846,8 @@ class zynthian_gui:
         self.screens['keyboard'].set_mode(OSK_NUMPAD)
         self.screen_lock.acquire()
         self.screens['keyboard'].show(callback, text, max_chars)
+        if self.current_screen != 'keyboard':
+            logging.info("SHOW SCREEN 'keyboard'")
         self.current_screen = 'keyboard'
         self.hide_screens(exclude='keyboard')
         self.screen_lock.release()

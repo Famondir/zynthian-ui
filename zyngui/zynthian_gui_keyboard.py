@@ -212,6 +212,37 @@ class zynthian_gui_keyboard(zynthian_gui_fullscreen_modal):
     def deferred_key_press(self, key, bold=False):
         self.keypress_queue.append((key, bold))
 
+    # Function to handle a key press from a physical keyboard
+    #  event: Tk key event, routed here by zynthian_main's cb_keybinding while this screen is shown
+    def physical_key(self, event):
+        if event.type != tkinter.EventType.KeyPress:
+            return
+        if event.keysym == "BackSpace":
+            self.deferred_key_press(self.btn_delete)
+        elif event.keysym in ("Return", "KP_Enter"):
+            self.deferred_key_press(self.btn_enter)
+        elif event.keysym == "Escape":
+            self.deferred_key_press(self.btn_cancel)
+        elif event.char and event.char.isprintable():
+            # Queued as the character itself, already resolved by X for layout and shift
+            self.deferred_key_press(event.char)
+
+    # Function to add a character typed on a physical keyboard
+    #  char: Character to add
+    def type_char(self, char):
+        if self.mode == OSK_NUMPAD and char not in "0123456789":
+            return
+        self.text = self.text + char
+        self.show_text()
+        if self.zyngui.tts:
+            self.zyngui.tts.announce(self.text, False, False, False)
+
+    # Function to apply max length and display the edited text
+    def show_text(self):
+        if self.max_len:
+            self.text = self.text[:self.max_len]
+        self.text_canvas.itemconfig(self.text_label, text=self.text)
+
     # Function to execute a key press
     #  key: Index of key
     #  bold: True if long / bold press
@@ -253,9 +284,6 @@ class zynthian_gui_keyboard(zynthian_gui_fullscreen_modal):
         elif self.shift == 1:
             self.shift = 0
 
-        if self.max_len:
-            self.text = self.text[:self.max_len]
-
         if shift != self.shift:
             if self.shift == 1:
                 self.key_canvas.itemconfig(self.buttons[self.btn_shift][0], fill="grey")
@@ -265,7 +293,7 @@ class zynthian_gui_keyboard(zynthian_gui_fullscreen_modal):
                 self.key_canvas.itemconfig(self.buttons[self.btn_shift][0], fill="black")
             self.refresh_keys()
 
-        self.text_canvas.itemconfig(self.text_label, text=self.text)
+        self.show_text()
         self.highlight(key)
         if self.zyngui.tts:
             self.zyngui.tts.announce(self.text, False, False, False)
@@ -432,8 +460,12 @@ class zynthian_gui_keyboard(zynthian_gui_fullscreen_modal):
     # to execute deferred keypressed from touch
     def plot_zctrls(self):
         while self.keypress_queue:
-            item = self.keypress_queue.pop()
-            self.execute_key_press(item[0], item[1])
+            # FIFO: several physical key presses can arrive between two calls
+            item = self.keypress_queue.pop(0)
+            if isinstance(item[0], str):
+                self.type_char(item[0])
+            else:
+                self.execute_key_press(item[0], item[1])
 
     # Function to refresh the loading screen => not used!
     def refresh_loading(self):
