@@ -177,6 +177,23 @@ standalone_engine_info = {
     'MD': ["MOD-UI", "MOD-UI - Plugin Host", "Special", "Language", True]
 }
 
+# What standalone engines need to start:
+# (program on PATH, or else systemd unit, install hint).
+# Engines not listed here run in-process (zynlibs/Python) and are always available.
+standalone_engine_requires = {
+    "ZY": ("zynaddsubfx", None, "zynaddsubfx"),
+    "FS": ("fluidsynth", None, "fluidsynth"),
+    "SF": ("sfizz_jack", None, None),
+    "LS": ("linuxsampler", None, None),
+    "BF": ("setBfree", None, "setbfree"),
+    "AE": ("aeolus", None, None),  # Zynthian's own fork, not Debian's aeolus
+    "SL": ("sooperlooper", None, "sooperlooper"),
+    "IR": ("vlc", None, "vlc vlc-plugin-jack"),
+    "PD": ("pd", None, "puredata"),
+    "MD": (None, "mod-ui", None),
+}
+systemd_unit_dirs = ["/etc/systemd/system", "/lib/systemd/system", "/usr/lib/systemd/system"]
+
 rpi5_plugins = [
     "http://theusualsuspects.lv2/Osirus",
     "http://theusualsuspects.lv2/OsTIrus",
@@ -310,6 +327,15 @@ def mark_unavailable_engines():
             info['AVAILABLE'] = info.get('URL') in installed
             if not info['AVAILABLE']:
                 info['INSTALL_HINT'] = get_install_hint(info.get('URL', ""), installed)
+        elif key in standalone_engine_requires:
+            program, unit, hint = standalone_engine_requires[key]
+            if program:
+                info['AVAILABLE'] = shutil.which(program) is not None
+            else:
+                unit_files = [f"{d}/{unit}.service" for d in systemd_unit_dirs]
+                info['AVAILABLE'] = any(os.path.isfile(f) for f in unit_files)
+            if not info['AVAILABLE']:
+                info['INSTALL_HINT'] = hint
 
     try:
         with open(ENGINE_DEFAULT_CONFIG_FILE) as f:
